@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ouroboros</title>
+<meta name="description" content="Audit a Salesforce CRM's data health right on this device.">
+<meta name="theme-color" content="#1f3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ouroboros">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="bar app-chrome">
+  <div class="bar-inner">
+    <div class="brand"><img src="icons/icon-192.png" alt="" width="28" height="28">Ouroboros</div>
+    <div id="engine" class="engine is-loading" role="status" aria-live="polite"><i></i><span>Starting up</span></div>
+  </div>
+</header>
+
+<main id="view-start" class="view app-chrome">
+  <section class="intro">
+    <h1>How healthy is this CRM?</h1>
+    <p class="lede">Load a company's Salesforce exports and get a plain-English report in about a minute:
+      a grade, what bad data costs the sales team, and what to fix first.</p>
+    <p class="privacy">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="10" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      Everything runs on this device. Customer data is never uploaded anywhere.
+    </p>
+  </section>
+
+  <div class="paths">
+    <section class="card demo" aria-labelledby="demo-h">
+      <div class="eyebrow">Demo</div>
+      <h2 id="demo-h">Run the sample company</h2>
+      <p>A made-up Salesforce org with about 1,000 contacts and the problems most CRMs have:
+        duplicates, stale deals, a sync tool creating junk. Good for showing how the audit works.</p>
+      <ul class="demo-facts">
+        <li><b>41</b> checks</li>
+        <li><b>6</b> areas</li>
+        <li><b>A&ndash;D</b> grade</li>
+      </ul>
+      <button id="run-sample" class="btn primary big" type="button">Run the sample</button>
+    </section>
+
+    <section class="card real" aria-labelledby="real-h">
+      <div class="eyebrow">Real audit</div>
+      <h2 id="real-h">Audit a company's CRM</h2>
+      <form id="audit-form" novalidate>
+        <div class="field">
+          <label for="client">Company name</label>
+          <input id="client" name="client" autocomplete="organization" placeholder="For example, Acme Staffing">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="reps">Sales reps</label>
+            <input id="reps" name="reps" type="number" inputmode="numeric" min="1" placeholder="10">
+          </div>
+          <div class="field">
+            <label for="touches">Calls and emails per rep, per day</label>
+            <input id="touches" name="touches" type="number" inputmode="numeric" min="1" placeholder="60">
+          </div>
+        </div>
+        <div class="field">
+          <span class="label" id="files-label">Salesforce exports (CSV files)</span>
+          <label class="drop" for="files" id="drop">
+            <input id="files" type="file" accept=".csv,text/csv" multiple aria-labelledby="files-label">
+            <strong>Choose files</strong>
+            <span>From Files, email or AirDrop: contacts, accounts, opportunities, leads, users, tasks, opportunity history</span>
+          </label>
+          <ul id="file-list" class="files" aria-live="polite"></ul>
+        </div>
+        <details id="interview">
+          <summary><span>Interview answers</span><span id="interview-count" class="count">optional</span></summary>
+          <p class="hint">Answer these during or after the kickoff call. Anything left on &ldquo;Not asked&rdquo;
+            shows as &ldquo;Not checked yet&rdquo;, and the grade is marked preliminary.</p>
+          <div id="questions"></div>
+        </details>
+        <button id="run-real" class="btn primary big" type="submit" disabled>Run the audit</button>
+        <p id="form-hint" class="hint center">Add a contacts export to start.</p>
+      </form>
+    </section>
+  </div>
+
+  <details class="help card">
+    <summary>What to export from Salesforce</summary>
+    <p>Use Data Loader (Export, &ldquo;Select all fields&rdquo;) or report exports. Name each file after what's in it:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td>contacts.csv</td><td>Duplicates, bad phones, missing fields, formatting, stale records</td></tr>
+          <tr><td>accounts.csv</td><td>Duplicate companies, missing company details, spelling variants</td></tr>
+          <tr><td>opportunities.csv</td><td>Stale and duplicate deals, deal links, loss reasons</td></tr>
+          <tr><td>leads.csv</td><td>Slow lead follow-up, leads that are already contacts</td></tr>
+          <tr><td>users.csv</td><td>Records owned by people who left; spotting integrations</td></tr>
+          <tr><td>tasks.csv</td><td>Exact 48-hour lead response time</td></tr>
+          <tr><td>opportunity_history.csv</td><td>Deals whose close date keeps slipping</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">Include CreatedById on contacts, accounts and leads to see who or what is creating the bad data.</p>
+  </details>
+</main>
+
+<main id="view-working" class="view app-chrome" hidden>
+  <section class="card working">
+    <div class="spinner" aria-hidden="true"></div>
+    <h2 id="work-title">Running the audit</h2>
+    <ol id="steps" class="steps" aria-live="polite"></ol>
+    <p id="first-run-note" class="hint">The first run on a device takes longer while the audit engine downloads
+      (about 30&nbsp;MB). After that it starts quickly and works offline.</p>
+  </section>
+</main>
+
+<main id="view-error" class="view app-chrome" hidden>
+  <section class="card error">
+    <h2>The audit couldn't finish</h2>
+    <p id="error-msg"></p>
+    <details><summary>Technical details</summary><pre id="error-detail"></pre></details>
+    <button id="error-back" class="btn primary" type="button">Back to start</button>
+  </section>
+</main>
+
+<section id="view-result" class="view result" hidden>
+  <div class="toolbar app-chrome">
+    <div class="toolbar-inner">
+      <button id="back" class="btn ghost" type="button">&larr; New audit</button>
+      <div id="result-grade" class="grade-pill"></div>
+      <div class="actions">
+        <button id="save-pdf" class="btn" type="button" aria-describedby="pdf-hint">Print or save PDF</button>
+        <button id="save-xlsx" class="btn" type="button">Excel details</button>
+        <button id="save-kit" class="btn" type="button">Cleanup kit</button>
+        <button id="share" class="btn" type="button" hidden>Share</button>
+      </div>
+    </div>
+    <p id="pdf-hint" class="toolbar-hint">To save or send the PDF, tap <b>Share</b> on the print screen.</p>
+  </div>
+  <div id="report" class="report-host"></div>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>
