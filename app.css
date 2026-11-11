@@ -62,10 +62,29 @@ button, input, select { font: inherit; color: inherit; }
 .engine.is-error { color: var(--bad); }
 @keyframes pulse { 50% { opacity: .3; } }
 
-.bar-right { display: flex; align-items: center; gap: 16px; }
+.bar-right { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; justify-content: flex-end; }
 .btn.small { min-height: 38px; padding: 0 14px; font-size: 15px; position: relative; }
 .btn .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-left: 8px; }
-@media (max-width: 520px) { .engine span { display: none; } }
+.btn .short { display: none; }
+@media (max-width: 520px) { .engine span { display: none; } .btn .long { display: none; } .btn .short { display: inline; } }
+.bar-inner { flex-wrap: wrap; padding-block: 6px; }
+
+/* back up / restore */
+.bk-sec { margin: 18px 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.bk-sec h3 { font-size: 18px; margin-bottom: 8px; }
+.bk-actions { justify-content: flex-start; }
+.hint.bad { color: var(--bad); }
+.rs-summary { margin: 8px 0 12px; padding-left: 20px; font-size: 15px; }
+.rs-opts { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.rs-opts legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+.rs-confirm { margin-top: 12px; padding: 12px 14px; background: var(--accent-soft); border-radius: 10px; }
+.rs-confirm p { margin: 0 0 10px; }
+.moved { background: var(--accent-soft); color: var(--navy); border-bottom: 1px solid var(--line); }
+.moved-inner { max-width: 1120px; margin: 0 auto; padding: 10px max(20px, env(safe-area-inset-right, 0px)) 10px max(20px, env(safe-area-inset-left, 0px));
+  display: flex; gap: 12px 18px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.moved p { margin: 0; flex: 1 1 320px; font-size: 15px; }
+.moved a { color: inherit; font-weight: 650; }
+.moved-actions { display: flex; gap: 10px; }
 
 /* "Your branding" panel */
 dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 22px 24px;
@@ -242,3 +261,5 @@ td:first-child { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospac
   body { background: #fff; padding: 0; }
   #view-result { display: block !important; }
 }
+
+.app-version { text-align: center; font-size: 12px; margin: 24px 0 16px; opacity: .7; }

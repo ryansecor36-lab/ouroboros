@@ -1,6 +1,210 @@
 /* Uroboric: the app screen. Talks to worker.js, which runs the Python audit. */
+
+/* ---------------------------------------------------------------- back up / restore (pure logic)
+   No page or storage access of its own: every function takes the storage (or data) it works on, so
+   tests/js/backup.test.mjs can run it under Node. A backup holds the app's saved settings only:
+   branding, audit history (scores and counts, never client records) and the unfinished-audit draft. */
+const UroboricBackup = (() => {
+  const FORMAT = "uroboric-backup", VERSION = 1, MAX_LOGO_BYTES = 1024 * 1024, MAX_PER_CLIENT = 24;
+  // "crm-audit-loaded-once" is deliberately not backed up: it only says this origin has downloaded the
+  // audit engine, which is not true on a new address.
+  const KEYS = { branding: "ouroboros-branding-v1", history: "ouroboros-history-v1", draft: "crm-audit-draft-v1" };
+  const ALL_KEYS = Object.values(KEYS);
+  const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+  const histKey = (client) => String(client || "").trim().toLowerCase();
+  const isDate = (d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
+
+  const MSG = {
+    damaged: "That file looks damaged, so nothing was restored. Back up again from the old address and pick the new file.",
+    notBackup: "That isn't a Uroboric backup. Pick the file named uroboric-backup-(date).json that you saved with Back up.",
+    newer: "That backup was made by a newer version of Uroboric than this one. Reload this page to get the latest version, then try again.",
+    empty: "That backup has nothing in it to restore.",
+  };
+
+  function cleanBranding(b) {
+    const warnings = [];
+    if (!isObj(b)) return { value: undefined, warnings };
+    const out = {};
+    if (typeof b.prepared_by === "string" && b.prepared_by.trim()) out.prepared_by = b.prepared_by.slice(0, 200);
+    if (typeof b.contact === "string" && b.contact.trim()) out.contact = b.contact.slice(0, 300);
+    if (typeof b.accent_color === "string" && /^#[0-9a-fA-F]{6}$/.test(b.accent_color)) out.accent_color = b.accent_color;
+    if (typeof b.logo_data === "string" && /^data:image\/(png|jpeg|svg\+xml)[;,]/.test(b.logo_data)) {
+      if (b.logo_data.length * 0.75 > MAX_LOGO_BYTES) warnings.push("The logo in this backup is over 1 MB, so it was left out.");
+      else out.logo_data = b.logo_data;
+    }
+    if (b.show_powered_by === false) out.show_powered_by = false;
+    return { value: Object.keys(out).length ? out : undefined, warnings };
+  }
+
+  // Groups snapshots by client, drops anything that doesn't look like a snapshot, sorts by date.
+  function cleanHistory(h) {
+    if (!isObj(h)) return { value: undefined, dropped: 0 };
+    const out = {};
+    let dropped = 0;
+    for (const list of Object.values(h)) {
+      if (!Array.isArray(list)) { dropped++; continue; }
+      for (const snap of list) {
+        if (!isObj(snap) || !isDate(snap.audit_date) || typeof snap.client !== "string" || !histKey(snap.client)) { dropped++; continue; }
+        const k = histKey(snap.client);
+        (out[k] = out[k] || []).push(snap);
+      }
+    }
+    for (const k of Object.keys(out)) {
+      const byDate = new Map();
+      for (const s of out[k]) byDate.set(s.audit_date, s);
+      out[k] = [...byDate.values()].sort((a, b) => (a.audit_date < b.audit_date ? -1 : 1)).slice(-MAX_PER_CLIENT);
+    }
+    return { value: Object.keys(out).length ? out : undefined, dropped };
+  }
+
+  function cleanDraft(d) { return isObj(d) && Object.keys(d).length ? d : undefined; }
+
+  function cleanData(raw) {
+    const data = {}, warnings = [];
+    const b = cleanBranding(raw[KEYS.branding]);
+    if (b.value) data[KEYS.branding] = b.value;
+    warnings.push(...b.warnings);
+    const h = cleanHistory(raw[KEYS.history]);
+    if (h.value) data[KEYS.history] = h.value;
+    if (h.dropped) warnings.push(`${h.dropped} saved audit${h.dropped === 1 ? "" : "s"} in the file couldn't be read and ${h.dropped === 1 ? "was" : "were"} skipped.`);
+    const d = cleanDraft(raw[KEYS.draft]);
+    if (d) data[KEYS.draft] = d;
+    return { data, warnings };
+  }
+
+  function readAll(storage) {
+    const raw = {};
+    for (const k of ALL_KEYS) {
+      let v;
+      try { v = storage.getItem(k); } catch (_) { v = null; }
+      if (v === null || v === undefined) continue;
+      try { raw[k] = JSON.parse(v); } catch (_) { /* unreadable value: left out */ }
+    }
+    return cleanData(raw).data;
+  }
+
+  function summarize(data) {
+    const hist = data[KEYS.history] || {};
+    const snaps = Object.values(hist).flat();
+    const dates = snaps.map((s) => s.audit_date).sort();
+    const clients = Object.values(hist).map((l) => l[l.length - 1].client).sort((a, b) => a.localeCompare(b));
+    const br = data[KEYS.branding];
+    return {
+      branding: !!br, logo: !!(br && br.logo_data), brandingName: (br && br.prepared_by) || "",
+      audits: snaps.length, clients, firstDate: dates[0] || null, lastDate: dates[dates.length - 1] || null,
+      draft: !!data[KEYS.draft],
+    };
+  }
+
+  function describe(data) {
+    const s = summarize(data);
+    const lead = s.branding ? "your branding (name, contact, logo)" : "no branding (none saved yet)";
+    const n = s.audits ? `${s.audits} past audit${s.audits === 1 ? "" : "s"} for ${s.clients.length === 1 ? "this client" : "these clients"}: ${s.clients.join(", ")}`
+      : "0 past audits";
+    return `${lead} and ${n} (scores and counts only — no records from any client's CRM).` + (s.draft ? " Also the client name and answers you were typing in." : "");
+  }
+
+  function makeBackup(storage, meta) {
+    meta = meta || {};
+    return {
+      format: FORMAT, version: VERSION, app_version: meta.appVersion || "",
+      exported_at: meta.now || new Date().toISOString(), origin: meta.origin || "",
+      data: readAll(storage),
+    };
+  }
+
+  function backupFileName(now) { return `uroboric-backup-${(now || new Date().toISOString()).slice(0, 10)}.json`; }
+
+  function parseBackup(text) {
+    if (typeof text !== "string" || !text.trim()) return { ok: false, error: MSG.damaged };
+    let doc;
+    try { doc = JSON.parse(text.replace(/^﻿/, "")); } catch (_) { return { ok: false, error: MSG.damaged }; }
+    if (!isObj(doc) || doc.format !== FORMAT) return { ok: false, error: MSG.notBackup };
+    if (typeof doc.version !== "number" || !(doc.version >= 1)) return { ok: false, error: MSG.damaged };
+    if (doc.version > VERSION) return { ok: false, error: MSG.newer };
+    if (!isObj(doc.data)) return { ok: false, error: MSG.damaged };
+    const { data, warnings } = cleanData(doc.data);
+    if (!Object.keys(data).length) return { ok: false, error: MSG.empty };
+    const backup = { format: FORMAT, version: doc.version, app_version: String(doc.app_version || ""),
+      exported_at: typeof doc.exported_at === "string" ? doc.exported_at : "", origin: String(doc.origin || ""), data };
+    return { ok: true, backup, summary: summarize(data), warnings };
+  }
+
+  function brandingConflict(current, backup) {
+    const a = current[KEYS.branding], b = (backup.data || backup)[KEYS.branding];
+    return !!a && !!b && JSON.stringify(a) !== JSON.stringify(b);
+  }
+
+  // current: data read from this device (readAll). backup: parseBackup(...).backup.
+  // mode: "merge" | "replace". brandingChoice: "device" | "backup" (only matters when both have branding).
+  // Returns {data, stats}. In "replace", keys missing from data are removed by applyToStorage.
+  function mergeBackup(current, backup, mode, brandingChoice) {
+    const theirs = backup.data || {};
+    const stats = { added: 0, duplicates: 0, brandingFrom: "none", brandingAsked: false };
+    if (mode === "replace") {
+      stats.added = summarize(theirs).audits;
+      stats.brandingFrom = theirs[KEYS.branding] ? "backup" : "none";
+      return { data: { ...theirs }, stats };
+    }
+    const data = { ...current };
+    const mine = current[KEYS.branding], other = theirs[KEYS.branding];
+    if (mine && other) {
+      stats.brandingAsked = true;
+      if (brandingChoice === "backup") { data[KEYS.branding] = other; stats.brandingFrom = "backup"; }
+      else stats.brandingFrom = "device";
+    } else if (other) { data[KEYS.branding] = other; stats.brandingFrom = "backup"; }
+    else if (mine) stats.brandingFrom = "device";
+    // History: union by client + audit date. A snapshot has no save time, so on a tie the audit already
+    // on this device wins (it was saved after the backup was made).
+    const hist = {};
+    for (const [k, list] of Object.entries(current[KEYS.history] || {})) hist[k] = list.slice();
+    for (const [k, list] of Object.entries(theirs[KEYS.history] || {})) {
+      const have = hist[k] || (hist[k] = []);
+      for (const snap of list) {
+        if (have.some((s) => s.audit_date === snap.audit_date)) stats.duplicates++;
+        else { have.push(snap); stats.added++; }
+      }
+      have.sort((a, b) => (a.audit_date < b.audit_date ? -1 : 1));
+      hist[k] = have.slice(-MAX_PER_CLIENT);
+    }
+    if (Object.keys(hist).length) data[KEYS.history] = hist;
+    if (!data[KEYS.draft] && theirs[KEYS.draft]) data[KEYS.draft] = theirs[KEYS.draft];
+    return { data, stats };
+  }
+
+  // Writes data to storage. On any failure puts everything back as it was and says why.
+  function applyToStorage(storage, data, mode) {
+    const before = {};
+    for (const k of ALL_KEYS) { try { before[k] = storage.getItem(k); } catch (_) { before[k] = null; } }
+    try {
+      for (const k of ALL_KEYS) {
+        if (data[k] !== undefined) storage.setItem(k, JSON.stringify(data[k]));
+        else if (mode === "replace") storage.removeItem(k);
+      }
+      return { ok: true };
+    } catch (e) {
+      for (const k of ALL_KEYS) {
+        try { if (before[k] === null || before[k] === undefined) storage.removeItem(k); else storage.setItem(k, before[k]); } catch (_) {}
+      }
+      const full = e && (e.name === "QuotaExceededError" || /quota|full/i.test(String(e.message)));
+      return { ok: false, error: full
+        ? "This device has no room left to save that (a large logo can cause this). Nothing was changed."
+        : "This browser won't let Uroboric save settings right now (private browsing can cause this). Nothing was changed." };
+    }
+  }
+
+  return { FORMAT, VERSION, KEYS, MSG, makeBackup, backupFileName, parseBackup, summarize, describe, readAll,
+    brandingConflict, mergeBackup, applyToStorage };
+})();
+if (typeof module !== "undefined" && module.exports) module.exports = UroboricBackup;
+
+/* Set to "https://app.uroboric.com/" when the app moves. On any other address the app then shows a
+   banner that walks the user through backing up here and restoring there. null = off. */
+const NEW_HOME = null;
+
 (() => {
   "use strict";
+  if (typeof document === "undefined") return; // loaded by the Node test: only the logic above is needed
   const $ = (id) => document.getElementById(id);
   const AREAS = {
     1: "Duplicate records", 2: "Wrong or outdated contact info", 3: "Missing or messy fields",
@@ -200,6 +404,149 @@
     refreshBrandDot();
     closeBrand();
   });
+
+  // ---------------------------------------------------------------- back up / restore (this device)
+  const bkDialog = $("backup-dialog");
+  const openDialog = (d) => { if (d.showModal) d.showModal(); else d.setAttribute("open", ""); };
+  const closeDialog = (d) => (d.close ? d.close() : d.removeAttribute("open"));
+  const appVersion = () => {
+    const el = document.querySelector(".app-version");
+    return el ? el.textContent.replace(/^\s*Uroboric\s*/i, "").trim() : "";
+  };
+  let parsed = null; // the backup chosen for restore
+
+  function storageOrNull() { try { return window.localStorage; } catch (_) { return null; } }
+
+  function refreshBackupSummary() {
+    const st = storageOrNull();
+    $("bk-includes").textContent = st
+      ? "Includes: " + UroboricBackup.describe(UroboricBackup.readAll(st))
+      : "This browser isn't letting Uroboric read its saved settings, so there is nothing to back up.";
+    $("bk-save").disabled = $("bk-share").disabled = !st;
+  }
+  function currentBackup() {
+    const st = storageOrNull();
+    if (!st) return null;
+    const b = UroboricBackup.makeBackup(st, { appVersion: appVersion(), origin: location.origin });
+    return { text: JSON.stringify(b, null, 2), name: UroboricBackup.backupFileName(b.exported_at) };
+  }
+  function rsStatus(text, bad) { const m = $("rs-msg"); m.textContent = text; m.className = "hint" + (bad ? " bad" : ""); }
+  function clearRestorePanel() { parsed = null; $("rs-panel").hidden = true; $("rs-confirm").hidden = true; rsStatus(""); }
+  function openBackupDialog() {
+    $("rs-file").value = "";
+    clearRestorePanel();
+    $("bk-msg").textContent = "";
+    refreshBackupSummary();
+    $("bk-share").hidden = !(navigator.share && navigator.canShare && typeof File === "function");
+    openDialog(bkDialog);
+  }
+  $("backup-open").addEventListener("click", openBackupDialog);
+  $("backup-close").addEventListener("click", () => closeDialog(bkDialog));
+
+  $("bk-save").addEventListener("click", () => {
+    const b = currentBackup();
+    if (!b) return;
+    try {
+      const url = URL.createObjectURL(new Blob([b.text], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = b.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      $("bk-msg").textContent = `Saved ${b.name}. On an iPad it goes to Downloads in the Files app; if nothing appeared, tap Share or save instead.`;
+    } catch (_) {
+      $("bk-msg").textContent = "This browser couldn't save the file. Try Share or save, or another browser.";
+    }
+  });
+  $("bk-share").addEventListener("click", async () => {
+    const b = currentBackup();
+    if (!b) return;
+    try {
+      const file = new File([b.text], b.name, { type: "application/json" });
+      if (!navigator.canShare({ files: [file] })) throw new Error("no-share");
+      await navigator.share({ files: [file], title: "Uroboric backup" });
+      $("bk-msg").textContent = "Shared. Choose Save to Files to keep it.";
+    } catch (e) {
+      $("bk-msg").textContent = e && e.name === "AbortError" ? "" : "Sharing isn't available here. Tap Download backup instead.";
+    }
+  });
+
+  const rsMode = () => (document.querySelector('input[name="rs-mode"]:checked') || {}).value || "merge";
+  const rsBrand = () => (document.querySelector('input[name="rs-brand"]:checked') || {}).value || "device";
+
+  function refreshRestoreOptions() {
+    if (!parsed) return;
+    const st = storageOrNull();
+    $("rs-brand").hidden = !(st && rsMode() === "merge" && UroboricBackup.brandingConflict(UroboricBackup.readAll(st), parsed.backup));
+    $("rs-confirm").hidden = true;
+    $("rs-go").hidden = false;
+  }
+  $("rs-file").addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0];
+    clearRestorePanel();
+    if (!f) return;
+    let text;
+    try { text = await f.text(); } catch (_) { return rsStatus(UroboricBackup.MSG.damaged, true); }
+    const r = UroboricBackup.parseBackup(text);
+    if (!r.ok) return rsStatus(r.error, true);
+    parsed = r;
+    const s = r.summary, ul = $("rs-summary");
+    ul.textContent = "";
+    const add = (t) => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); };
+    add(s.branding ? `Branding: yes${s.brandingName ? " (" + s.brandingName + ")" : ""}${s.logo ? ", with a logo" : ""}` : "Branding: none");
+    add(s.audits ? `${s.audits} past audit${s.audits === 1 ? "" : "s"} for ${s.clients.length} client${s.clients.length === 1 ? "" : "s"}: ${s.clients.join(", ")}` : "Past audits: none");
+    if (s.audits) add(`Audit dates: ${s.firstDate === s.lastDate ? s.firstDate : s.firstDate + " to " + s.lastDate}`);
+    if (r.backup.exported_at) add(`Backed up ${r.backup.exported_at.slice(0, 10)}${r.backup.origin ? " from " + r.backup.origin : ""}`);
+    r.warnings.forEach(add);
+    $("rs-panel").hidden = false;
+    rsStatus("Backup read. Choose how to restore it.");
+    refreshRestoreOptions();
+  });
+  for (const r of document.querySelectorAll('input[name="rs-mode"], input[name="rs-brand"]')) r.addEventListener("change", refreshRestoreOptions);
+
+  $("rs-go").addEventListener("click", () => {
+    if (!parsed) return;
+    const withBrand = $("rs-brand").hidden ? "" : (rsBrand() === "backup" ? " and uses the backup's branding" : " and keeps this device's branding");
+    $("rs-confirm-text").textContent = rsMode() === "replace"
+      ? "This erases the branding and audit history on this device and puts the backup's in their place. Continue?"
+      : "This adds the backup's audits to what is here" + withBrand + ". Nothing already here is deleted. Continue?";
+    $("rs-confirm").hidden = false;
+    $("rs-go").hidden = true;
+    $("rs-yes").focus();
+  });
+  $("rs-no").addEventListener("click", () => { $("rs-confirm").hidden = true; $("rs-go").hidden = false; $("rs-go").focus(); });
+  $("rs-yes").addEventListener("click", () => {
+    const st = storageOrNull();
+    if (!st || !parsed) return rsStatus("This browser isn't letting Uroboric save settings, so nothing was restored.", true);
+    const mode = rsMode();
+    const { data, stats } = UroboricBackup.mergeBackup(UroboricBackup.readAll(st), parsed.backup, mode, rsBrand());
+    const res = UroboricBackup.applyToStorage(st, data, mode);
+    $("rs-confirm").hidden = true;
+    if (!res.ok) { $("rs-go").hidden = false; return rsStatus(res.error, true); }
+    brand = loadBrand(); refreshBrandDot();
+    const d = loadDraft();
+    $("client").value = d.client || ""; $("reps").value = (d.impact && d.impact.reps) || ""; $("touches").value = (d.impact && d.impact.touches_per_rep_per_day) || "";
+    if (engineReady) renderQuestions();
+    const parts = [mode === "replace" ? "Restored. This device now matches the backup." : "Restored."];
+    if (stats.added) parts.push(`${stats.added} audit${stats.added === 1 ? "" : "s"} added.`);
+    if (stats.duplicates) parts.push(`${stats.duplicates} already here and kept.`);
+    if (stats.brandingFrom === "backup") parts.push("Branding from the backup is in use.");
+    $("rs-panel").hidden = true; parsed = null;
+    refreshBackupSummary();
+    rsStatus(parts.join(" "));
+  });
+
+  // ---------------------------------------------------------------- "we've moved" banner (off unless NEW_HOME is set)
+  (function movedBanner() {
+    let moved = false, host = "";
+    try { const u = new URL(NEW_HOME); moved = u.origin !== location.origin; host = u.host; } catch (_) {}
+    if (!NEW_HOME || !moved) return;
+    $("moved-host").textContent = host;
+    $("moved-link").href = NEW_HOME;
+    $("moved-link").textContent = host;
+    $("moved-banner").hidden = false;
+    $("moved-backup").addEventListener("click", openBackupDialog);
+    $("moved-hide").addEventListener("click", () => { $("moved-banner").hidden = true; });
+  })();
 
   // ---------------------------------------------------------------- interview questions
   function renderQuestions() {

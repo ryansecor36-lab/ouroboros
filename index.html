@@ -22,10 +22,69 @@
     <div class="bar-right">
       <button id="apply-open" class="btn small" type="button" aria-haspopup="dialog">Apply review</button>
       <button id="brand-open" class="btn small" type="button" aria-haspopup="dialog">Your branding<span id="brand-dot" class="dot" hidden></span></button>
+      <button id="backup-open" class="btn small" type="button" aria-haspopup="dialog"><span class="long">Back up / restore</span><span class="short">Backup</span></button>
       <div id="engine" class="engine is-loading" role="status" aria-live="polite"><i></i><span>Starting up</span></div>
     </div>
   </div>
 </header>
+
+<div id="moved-banner" class="moved app-chrome" role="region" aria-label="Uroboric has moved" hidden>
+  <div class="moved-inner">
+    <p><b>Uroboric has moved to <span id="moved-host">the new address</span>.</b>
+      1) Tap <b>Back up here</b>. 2) Open <a id="moved-link" href="#">the new address</a>, tap <b>Back up / restore</b>, then choose the file under <b>Restore</b>.</p>
+    <div class="moved-actions">
+      <button id="moved-backup" class="btn small primary" type="button">Back up here</button>
+      <button id="moved-hide" class="btn small" type="button">Not now</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="backup-dialog" class="app-chrome" aria-labelledby="bk-h">
+  <h2 id="bk-h">Back up / restore</h2>
+  <p class="hint">Your settings live only on this device and this web address. Back them up before you switch iPads,
+    clear Safari's data, or move to a new address. A backup has client names and scores but no records from any client's CRM. Keep the file private and delete it after restoring.</p>
+  <section class="bk-sec" aria-labelledby="bk-h1">
+    <h3 id="bk-h1">Back up</h3>
+    <p id="bk-includes" class="hint"></p>
+    <div class="dialog-actions bk-actions">
+      <button id="bk-save" class="btn primary" type="button">Download backup</button>
+      <button id="bk-share" class="btn" type="button" hidden>Share or save</button>
+    </div>
+    <p id="bk-msg" class="hint" role="status" aria-live="polite"></p>
+  </section>
+  <section class="bk-sec" aria-labelledby="bk-h2">
+    <h3 id="bk-h2">Restore</h3>
+    <div class="field">
+      <label for="rs-file">Backup file (.json)</label>
+      <input id="rs-file" type="file" accept=".json,application/json">
+    </div>
+    <p id="rs-msg" class="hint" role="status" aria-live="polite"></p>
+    <div id="rs-panel" hidden>
+      <ul id="rs-summary" class="rs-summary"></ul>
+      <fieldset class="rs-opts">
+        <legend>How should it be restored?</legend>
+        <label class="check"><input type="radio" name="rs-mode" value="merge" checked> Merge with what's here</label>
+        <label class="check"><input type="radio" name="rs-mode" value="replace"> Replace everything</label>
+      </fieldset>
+      <fieldset id="rs-brand" class="rs-opts" hidden>
+        <legend>Both have branding. Which should be used?</legend>
+        <label class="check"><input type="radio" name="rs-brand" value="device" checked> Keep this device's branding</label>
+        <label class="check"><input type="radio" name="rs-brand" value="backup"> Use the backup's branding</label>
+      </fieldset>
+      <button id="rs-go" class="btn primary" type="button">Restore&hellip;</button>
+      <div id="rs-confirm" class="rs-confirm" role="alert" hidden>
+        <p id="rs-confirm-text"></p>
+        <div class="dialog-actions">
+          <button id="rs-no" class="btn" type="button">Go back</button>
+          <button id="rs-yes" class="btn primary" type="button">Yes, restore</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <div class="dialog-actions">
+    <button id="backup-close" class="btn" type="button">Close</button>
+  </div>
+</dialog>
 
 <dialog id="apply-dialog" class="app-chrome" aria-labelledby="apply-h">
   <h2 id="apply-h">Apply review</h2>
@@ -230,6 +289,8 @@
   </section>
   <div id="report" class="report-host"></div>
 </section>
+
+<p class="hint app-version">Uroboric 1.0.0</p>
 
 <script src="app.js"></script>
 </body>
