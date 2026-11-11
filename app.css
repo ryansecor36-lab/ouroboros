@@ -253,10 +253,50 @@ td:first-child { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospac
 .quote-fallback { width: 100%; margin-top: 10px; font: 14px ui-monospace, Menlo, Consolas, monospace; background: var(--bg);
   color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
 
+.demo-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* Guided demo: dimmed overlay with a cut-out around the target, and a large card */
+.tour { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+.tour-block { position: absolute; inset: 0; pointer-events: auto; touch-action: pan-y; background: transparent; }
+.tour.is-center .tour-block, .tour.no-target .tour-block { background: rgba(10, 16, 26, .7); }
+.tour-dim { position: fixed; background: rgba(10, 16, 26, .7); pointer-events: none; }
+.tour-spot { position: fixed; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 4px var(--focus), 0 0 0 8px rgba(255, 255, 255, .85);
+  }
+.tour-card { position: fixed; pointer-events: auto; background: var(--surface); color: var(--ink);
+  border-radius: 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, .35); padding: 22px 24px 18px;
+  left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: max(12px, env(safe-area-inset-bottom, 0px)); max-width: 720px; margin: 0 auto; outline: none; }
+.tour-card:focus-visible, .tour-btn:focus-visible, .tour-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.tour-title { font-size: 26px; line-height: 1.2; margin: 0 40px 8px 0; font-family: var(--font-display); }
+.tour-text { font-size: 21px; line-height: 1.45; margin: 0; }
+.tour-list { font-size: 21px; line-height: 1.4; margin: 12px 0 0; padding-left: 28px; display: grid; gap: 6px; }
+.tour-list[hidden] { display: none; }
+.tour-foot { display: flex; align-items: center; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
+.tour-count { font-weight: 650; color: var(--muted); font-size: 16px; }
+.tour-dots { display: inline-flex; gap: 6px; }
+.tour-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.tour-dots i.on { background: var(--navy); }
+.tour-nav { margin-left: auto; display: inline-flex; gap: 10px; }
+.tour-btn { min-height: 52px; min-width: 104px; padding: 0 22px; font: 650 19px var(--font); border-radius: 14px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.tour-btn.primary { background: var(--navy); color: var(--navy-ink); border-color: var(--navy); }
+.tour-btn:disabled { opacity: .4; cursor: default; }
+.tour-close { position: absolute; top: 10px; right: 12px; width: 48px; height: 48px; border-radius: 50%; border: 0;
+  background: transparent; color: var(--muted); font-size: 32px; line-height: 1; cursor: pointer; }
+.tour.is-center .tour-card { top: 50%; bottom: auto; transform: translateY(-50%); }
+/* wide landscape: the card sits at the side and the report makes room for it */
+.tour.is-side .tour-card { left: auto; right: max(20px, env(safe-area-inset-right, 0px)); width: 380px; margin: 0; }
+.tour.is-side.is-center .tour-card { left: 50%; right: auto; width: 520px; transform: translate(-50%, -50%); }
+.tour.is-side .tour-title { font-size: 24px; }
+.tour.is-side .tour-text, .tour.is-side .tour-list { font-size: 19px; }
+body.tour-side #report { margin-right: 420px; }
 @media (prefers-reduced-motion: reduce) {
   .spinner, .engine.is-loading i { animation: none; }
 }
 @media print {
+  .tour { display: none !important; }
+  body.tour-side #report { margin-right: 0 !important; }
   .app-chrome, .bar, .quote-panel { display: none !important; }
   body { background: #fff; padding: 0; }
   #view-result { display: block !important; }

@@ -261,7 +261,9 @@ const NEW_HOME = null;
   let currentRun = null;
 
   // ---------------------------------------------------------------- views
+  let tour = null; // the Guided demo controller, created below
   function show(view) {
+    if (tour && tour.isOpen()) tour.stop(false);
     for (const v of ["start", "working", "error", "result"]) $("view-" + v).hidden = v !== view;
     window.scrollTo(0, 0);
   }
@@ -724,12 +726,18 @@ const NEW_HOME = null;
   }
 
   let saveAfterRun = false;
-  $("run-sample").addEventListener("click", () => {
+  let tourAfterRun = false; // set by the Guided demo button: start the tour when the report is ready
+  function runSample(demo) {
     saveAfterRun = false; // the made-up sample company isn't kept in history
-    // The sample keeps its own made-up company name and interview answers
+    tourAfterRun = demo;
+    // The sample keeps its own made-up company name and interview answers. In demo mode the engine also
+    // adds a labelled example earlier audit so the progress section can be shown (never saved).
     const crm = (document.querySelector('input[name="sample-crm"]:checked') || {}).value || "salesforce";
-    run("runSample", { settings: { client: "", impact: {}, crm, branding: brandForEngine() } }, [], "Auditing the sample company");
-  });
+    run("runSample", { settings: { client: "", impact: {}, crm, demo, branding: brandForEngine() } }, [],
+      demo ? "Getting the guided demo ready" : "Auditing the sample company");
+  }
+  $("run-sample").addEventListener("click", () => runSample(false));
+  $("run-demo").addEventListener("click", () => runSample(true));
 
   // ---------------------------------------------------------------- audit history (this device only)
   const HIST_KEY = "ouroboros-history-v1";
@@ -769,6 +777,7 @@ const NEW_HOME = null;
   });
 
   function showError(err) {
+    tourAfterRun = false;
     $("error-msg").textContent = (err && err.message) || "Something went wrong.";
     $("error-detail").textContent = (err && err.detail) || "";
     show("error");
@@ -817,7 +826,19 @@ const NEW_HOME = null;
     $("share").hidden = !canShare;
     document.title = `${result.client} - Uroboric`;
     show("result");
+    if (tourAfterRun) { tourAfterRun = false; startTour(); }
   }
+
+  // ---------------------------------------------------------------- guided demo (nothing here is saved)
+  tour = UroboricTour.createTour({
+    document, window,
+    getReportRoot: () => $("report").shadowRoot,
+    onStart: () => setQuoteOpen(false), // the consultant's Quote panel is never shown during the tour
+  });
+  function startTour() {
+    if (last && last.result.tour) tour.start(last.result.tour);
+  }
+  $("walk-through").addEventListener("click", startTour);
 
   function download(blob, name) {
     const url = URL.createObjectURL(blob);

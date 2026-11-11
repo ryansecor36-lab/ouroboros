@@ -167,7 +167,10 @@
         <li><b>6</b> areas</li>
         <li><b>A&ndash;D</b> grade</li>
       </ul>
-      <button id="run-sample" class="btn primary big" type="button">Run the sample</button>
+      <div class="demo-actions">
+        <button id="run-sample" class="btn primary big" type="button">Run the sample</button>
+        <button id="run-demo" class="btn big" type="button">Guided demo</button>
+      </div>
     </section>
 
     <section class="card real" aria-labelledby="real-h">
@@ -257,6 +260,7 @@
       <div id="result-grade" class="grade-pill"></div>
       <div id="result-note" class="toolbar-hint" role="status" hidden></div>
       <div class="actions">
+        <button id="walk-through" class="btn primary" type="button">Walk through it</button>
         <button id="save-pdf" class="btn" type="button" aria-describedby="pdf-hint">Print or save PDF</button>
         <button id="save-xlsx" class="btn" type="button">Excel details</button>
         <button id="save-kit" class="btn" type="button">Cleanup kit</button>
@@ -290,8 +294,9 @@
   <div id="report" class="report-host"></div>
 </section>
 
-<p class="hint app-version">Uroboric 1.0.0</p>
+<p class="hint app-version">Uroboric 1.1.0</p>
 
+<script src="tour.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
