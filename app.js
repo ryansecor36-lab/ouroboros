@@ -173,7 +173,7 @@
   let kinds = {};
 
   function addFiles(list) {
-    for (const f of list) if (/\.csv$/i.test(f.name) || f.type === "text/csv") files.set(f.name, f);
+    for (const f of list) if (/\.(csv|xlsx)$/i.test(f.name) || f.type === "text/csv") files.set(f.name, f);
     refreshFiles();
   }
   $("files").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
@@ -254,7 +254,8 @@
   $("run-sample").addEventListener("click", () => {
     saveAfterRun = false; // the made-up sample company isn't kept in history
     // The sample keeps its own made-up company name and interview answers
-    run("runSample", { settings: { client: "", impact: {} } }, [], "Auditing the sample company");
+    const crm = (document.querySelector('input[name="sample-crm"]:checked') || {}).value || "salesforce";
+    run("runSample", { settings: { client: "", impact: {}, crm } }, [], "Auditing the sample company");
   });
 
   // ---------------------------------------------------------------- audit history (this device only)

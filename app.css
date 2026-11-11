@@ -88,6 +88,9 @@ button, input, select { font: inherit; color: inherit; }
 .demo-facts li { font-size: 14px; opacity: .85; }
 .demo-facts b { display: block; font-size: 26px; font-family: var(--font-display); opacity: 1; }
 .demo .btn.primary { background: var(--navy-ink); color: var(--navy); }
+.crm-pick { margin: 0 0 16px; }
+.demo .crm-pick label { border-color: rgba(255,255,255,.35); color: inherit; }
+.demo .crm-pick input:checked + label { background: var(--navy-ink); color: var(--navy); }
 
 /* form */
 form { display: grid; gap: 18px; margin-top: 16px; }

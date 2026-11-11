@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ouroboros</title>
-<meta name="description" content="Audit a Salesforce CRM's data health right on this device.">
+<meta name="description" content="Audit a Salesforce, HubSpot or Dynamics 365 CRM's data health right on this device.">
 <meta name="theme-color" content="#1f3a5f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -26,7 +26,7 @@
 <main id="view-start" class="view app-chrome">
   <section class="intro">
     <h1>How healthy is this CRM?</h1>
-    <p class="lede">Load a company's Salesforce exports and get a plain-English report in about a minute:
+    <p class="lede">Load a company's Salesforce, HubSpot or Dynamics 365 exports and get a plain-English report in about a minute:
       a grade, what bad data costs the sales team, and what to fix first.</p>
     <p class="privacy">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="10" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
@@ -38,8 +38,13 @@
     <section class="card demo" aria-labelledby="demo-h">
       <div class="eyebrow">Demo</div>
       <h2 id="demo-h">Run the sample company</h2>
-      <p>A made-up Salesforce org with about 1,000 contacts and the problems most CRMs have:
+      <p>A made-up company with about 1,000 contacts and the problems most CRMs have:
         duplicates, stale deals, a sync tool creating junk. Good for showing how the audit works.</p>
+      <div class="seg crm-pick" role="radiogroup" aria-label="Show the sample as">
+        <input type="radio" name="sample-crm" id="sc-salesforce" value="salesforce" checked><label for="sc-salesforce">Salesforce</label>
+        <input type="radio" name="sample-crm" id="sc-hubspot" value="hubspot"><label for="sc-hubspot">HubSpot</label>
+        <input type="radio" name="sample-crm" id="sc-dynamics" value="dynamics"><label for="sc-dynamics">Dynamics 365</label>
+      </div>
       <ul class="demo-facts">
         <li><b>41</b> checks</li>
         <li><b>6</b> areas</li>
@@ -67,11 +72,11 @@
           </div>
         </div>
         <div class="field">
-          <span class="label" id="files-label">Salesforce exports (CSV files)</span>
+          <span class="label" id="files-label">CRM exports (CSV or Excel files)</span>
           <label class="drop" for="files" id="drop">
-            <input id="files" type="file" accept=".csv,text/csv" multiple aria-labelledby="files-label">
+            <input id="files" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple aria-labelledby="files-label">
             <strong>Choose files</strong>
-            <span>From Files, email or AirDrop: contacts, accounts, opportunities, leads, users, tasks, opportunity history</span>
+            <span>Salesforce, HubSpot or Dynamics 365 exports from Files, email or AirDrop: contacts, companies, deals, leads, users</span>
           </label>
           <ul id="file-list" class="files" aria-live="polite"></ul>
         </div>
@@ -88,23 +93,22 @@
   </div>
 
   <details class="help card">
-    <summary>What to export from Salesforce</summary>
-    <p>Use Data Loader (Export, &ldquo;Select all fields&rdquo;) or report exports. Name each file after what's in it:</p>
+    <summary>What to export from each CRM</summary>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>File</th><th>Used for</th></tr></thead>
+        <thead><tr><th>CRM</th><th>How to export</th><th>Files</th></tr></thead>
         <tbody>
-          <tr><td>contacts.csv</td><td>Duplicates, bad phones, missing fields, formatting, stale records</td></tr>
-          <tr><td>accounts.csv</td><td>Duplicate companies, missing company details, spelling variants</td></tr>
-          <tr><td>opportunities.csv</td><td>Stale and duplicate deals, deal links, loss reasons</td></tr>
-          <tr><td>leads.csv</td><td>Slow lead follow-up, leads that are already contacts</td></tr>
-          <tr><td>users.csv</td><td>Records owned by people who left; spotting integrations</td></tr>
-          <tr><td>tasks.csv</td><td>Exact 48-hour lead response time</td></tr>
-          <tr><td>opportunity_history.csv</td><td>Deals whose close date keeps slipping</td></tr>
+          <tr><td>Salesforce</td><td>Data Loader (Export, "Select all fields") or Setup &gt; Data Export</td>
+            <td>Contact, Account, Opportunity, Lead, User, Task, OpportunityHistory</td></tr>
+          <tr><td>HubSpot</td><td>Contacts, Companies and Deals lists &gt; Export &gt; "All properties"</td>
+            <td>The three export files, unrenamed</td></tr>
+          <tr><td>Dynamics 365</td><td>Open each view &gt; Export to Excel (Active Contacts, Accounts, Opportunities, Leads, Users)</td>
+            <td>The Excel files, unrenamed</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="hint">Include CreatedById on contacts, accounts and leads to see who or what is creating the bad data.</p>
+    <p class="hint">The CRM is recognized from the files. Include who created each record (Created By, or HubSpot's
+      Record source) to see who or what is creating the bad data.</p>
   </details>
 </main>
 
