@@ -39,8 +39,19 @@
   </div>
 </div>
 
+<div id="update-banner" class="moved app-chrome" role="region" aria-label="Update ready" hidden>
+  <div class="moved-inner">
+    <p id="update-text" role="status" aria-live="polite"></p>
+    <div class="moved-actions">
+      <button id="update-now" class="btn small primary" type="button">Refresh now</button>
+      <button id="update-later" class="btn small" type="button">Later</button>
+    </div>
+  </div>
+</div>
+
 <dialog id="backup-dialog" class="app-chrome" aria-labelledby="bk-h">
   <h2 id="bk-h">Back up / restore</h2>
+  <p class="hint">You are using Uroboric <span id="bk-version"></span>.</p>
   <p class="hint">Your settings live only on this device and this web address. Back them up before you switch iPads,
     clear Safari's data, or move to a new address. A backup has client names and scores but no records from any client's CRM. Keep the file private and delete it after restoring.</p>
   <section class="bk-sec" aria-labelledby="bk-h1">
@@ -294,7 +305,7 @@
   <div id="report" class="report-host"></div>
 </section>
 
-<p class="hint app-version">Uroboric 1.1.0</p>
+<p class="hint app-version">Uroboric 1.1.1</p>
 
 <script src="tour.js"></script>
 <script src="app.js"></script>

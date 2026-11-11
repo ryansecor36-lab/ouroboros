@@ -198,6 +198,27 @@ const UroboricBackup = (() => {
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = UroboricBackup;
 
+/* When to tell the person a newer Uroboric is available. Pure functions so tests/js/update.test.mjs can
+   run them under Node. waiting: a new version is downloaded and waiting. busy: an audit report or the
+   Guided demo is open. pageVersion / networkVersion: the version string of the page on screen and of the
+   one currently on the web server (null when unknown, e.g. offline). */
+const UroboricUpdate = (() => {
+  const TEXT = "A new version of Uroboric is ready.";
+  const TEXT_BUSY = "A new version of Uroboric is ready. Refresh when you're done — your current report stays open until then.";
+  function shouldShowUpdate(s) {
+    s = s || {};
+    if (s.hasController && s.waiting) return true;
+    return !!(s.pageVersion && s.networkVersion && s.pageVersion !== s.networkVersion);
+  }
+  const bannerText = (busy) => (busy ? TEXT_BUSY : TEXT);
+  function parseVersion(html) {
+    const m = /class="[^"]*\bapp-version\b[^"]*"[^>]*>\s*Uroboric\s+([^<\s][^<]*?)\s*</i.exec(String(html || ""));
+    return m ? m[1] : null;
+  }
+  return { TEXT, TEXT_BUSY, shouldShowUpdate, bannerText, parseVersion };
+})();
+if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricUpdate });
+
 /* Set to "https://app.uroboric.com/" when the app moves. On any other address the app then shows a
    banner that walks the user through backing up here and restoring there. null = off. */
 const NEW_HOME = null;
@@ -266,6 +287,7 @@ const NEW_HOME = null;
     if (tour && tour.isOpen()) tour.stop(false);
     for (const v of ["start", "working", "error", "result"]) $("view-" + v).hidden = v !== view;
     window.scrollTo(0, 0);
+    try { refreshUpdateText(); } catch (_) { /* not set up yet */ }
   }
 
   // ---------------------------------------------------------------- draft (per-device convenience)
@@ -438,6 +460,7 @@ const NEW_HOME = null;
     $("rs-file").value = "";
     clearRestorePanel();
     $("bk-msg").textContent = "";
+    $("bk-version").textContent = appVersion();
     refreshBackupSummary();
     $("bk-share").hidden = !(navigator.share && navigator.canShare && typeof File === "function");
     openDialog(bkDialog);
@@ -836,7 +859,7 @@ const NEW_HOME = null;
     onStart: () => setQuoteOpen(false), // the consultant's Quote panel is never shown during the tour
   });
   function startTour() {
-    if (last && last.result.tour) tour.start(last.result.tour);
+    if (last && last.result.tour) { tour.start(last.result.tour); refreshUpdateText(); }
   }
   $("walk-through").addEventListener("click", startTour);
 
@@ -948,8 +971,71 @@ const NEW_HOME = null;
   $("back").addEventListener("click", () => { document.title = "Uroboric"; show("start"); });
   window.addEventListener("afterprint", () => {});
 
-  // ---------------------------------------------------------------- offline support
-  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+  // ---------------------------------------------------------------- offline support and updates
+  // A new version downloads in the background and waits. We tell the person ("A new version of Uroboric
+  // is ready"), and only swap when they tap Refresh now, so a report on screen is never pulled away.
+  const updBanner = $("update-banner");
+  let swReg = null;
+  let refreshRequested = false; // only reload after the person asked: guards against reload loops
+  let reloaded = false;
+  const isBusy = () => !$("view-result").hidden || !$("view-working").hidden || !!(tour && tour.isOpen());
+  function refreshUpdateText() {
+    $("update-text").textContent = UroboricUpdate.bannerText(isBusy());
+  }
+  function showUpdateBanner() { refreshUpdateText(); updBanner.hidden = false; }
+  function reloadOnce() { if (reloaded) return; reloaded = true; location.reload(); }
+  function evaluateUpdate(networkVersion) {
+    const hasController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+    if (UroboricUpdate.shouldShowUpdate({ hasController, waiting: !!(swReg && swReg.waiting),
+        busy: isBusy(), pageVersion: appVersion(), networkVersion: networkVersion || null })) showUpdateBanner();
+  }
+  async function fetchNetworkVersion() {
+    try {
+      const r = await fetch("./index.html?v=" + Date.now(), { cache: "no-store" });
+      return r.ok ? UroboricUpdate.parseVersion(await r.text()) : null;
+    } catch (_) { return null; }
+  }
+  async function checkForUpdate() {
+    if (!swReg || navigator.onLine === false) return;
+    try { await swReg.update(); } catch (_) { /* offline or the server is down: try again later */ }
+    evaluateUpdate(await fetchNetworkVersion());
+  }
+  function watchInstalling(worker) {
+    if (!worker) return;
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "installed") evaluateUpdate(null);
+    });
+  }
+  async function refreshNow() {
+    refreshRequested = true;
+    $("update-now").disabled = true;
+    $("update-text").textContent = "Updating…";
+    try {
+      if (!swReg.waiting) { // the page noticed a newer version before its files finished downloading
+        const w = swReg.installing || (await swReg.update().then(() => swReg.installing).catch(() => null));
+        if (w && w.state !== "installed" && w.state !== "activated") {
+          await new Promise((res) => { w.addEventListener("statechange", () => w.state === "installed" && res()); setTimeout(res, 90000); });
+        }
+      }
+      if (swReg.waiting) { swReg.waiting.postMessage({ type: "SKIP_WAITING" }); setTimeout(reloadOnce, 4000); } // controllerchange reloads; this is the fallback
+      else reloadOnce();
+    } catch (_) { reloadOnce(); }
+  }
+  $("update-now").addEventListener("click", refreshNow);
+  $("update-later").addEventListener("click", () => { updBanner.hidden = true; });
+  window.UroboricCheckForUpdate = checkForUpdate; // lets a test or the console trigger the same check
+
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (refreshRequested) reloadOnce(); });
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      swReg = reg;
+      watchInstalling(reg.installing);
+      reg.addEventListener("updatefound", () => watchInstalling(reg.installing));
+      evaluateUpdate(null); // a worker may already be waiting (the app was closed mid-update)
+      checkForUpdate();
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(); });
+      window.addEventListener("online", checkForUpdate);
+      setInterval(checkForUpdate, 30 * 60 * 1000);
+    }).catch(() => {});
   }
 })();
