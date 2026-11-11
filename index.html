@@ -19,9 +19,51 @@
 <header class="bar app-chrome">
   <div class="bar-inner">
     <div class="brand"><img src="icons/icon-192.png" alt="" width="28" height="28">Ouroboros</div>
-    <div id="engine" class="engine is-loading" role="status" aria-live="polite"><i></i><span>Starting up</span></div>
+    <div class="bar-right">
+      <button id="brand-open" class="btn small" type="button" aria-haspopup="dialog">Your branding<span id="brand-dot" class="dot" hidden></span></button>
+      <div id="engine" class="engine is-loading" role="status" aria-live="polite"><i></i><span>Starting up</span></div>
+    </div>
   </div>
 </header>
+
+<dialog id="brand-dialog" class="app-chrome" aria-labelledby="brand-h">
+  <form id="brand-form" method="dialog" novalidate>
+    <h2 id="brand-h">Your branding</h2>
+    <p class="hint">Put your own name and logo on the reports you hand to clients. All optional.
+      Saved on this device only; it never leaves it.</p>
+    <div class="field">
+      <label for="b-prepared">Prepared by</label>
+      <input id="b-prepared" type="text" autocomplete="organization" placeholder="For example, Acme IT Services">
+    </div>
+    <div class="field">
+      <label for="b-contact">Contact line</label>
+      <input id="b-contact" type="text" placeholder="jane@acmeit.com &middot; (555) 123-4567">
+      <span class="hint">Shown under &ldquo;Questions?&rdquo; at the end of the report.</span>
+    </div>
+    <div class="field">
+      <label for="b-color">Accent color</label>
+      <div class="color-row">
+        <input id="b-color" type="color" value="#1f3a5f">
+        <button id="b-color-reset" class="btn small" type="button">Use the standard blue</button>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label" id="b-logo-label">Logo (PNG, JPG or SVG)</span>
+      <div class="logo-row">
+        <img id="b-logo-preview" alt="Your logo" hidden>
+        <input id="b-logo" type="file" accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg" aria-labelledby="b-logo-label">
+        <button id="b-logo-clear" class="btn small" type="button" hidden>Remove logo</button>
+      </div>
+      <span id="b-logo-msg" class="hint" role="status"></span>
+    </div>
+    <label class="check"><input id="b-powered" type="checkbox" checked> Show &ldquo;Powered by Ouroboros&rdquo; on the report</label>
+    <div class="dialog-actions">
+      <button id="brand-clear" class="btn ghost" type="button">Clear all</button>
+      <button id="brand-save" class="btn primary" type="submit" value="save">Save</button>
+      <button id="brand-cancel" class="btn" type="button">Cancel</button>
+    </div>
+  </form>
+</dialog>
 
 <main id="view-start" class="view app-chrome">
   <section class="intro">

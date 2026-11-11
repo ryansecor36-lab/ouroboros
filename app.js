@@ -75,6 +75,132 @@
   $("touches").value = (draft.impact && draft.impact.touches_per_rep_per_day) || "";
   for (const id of ["client", "reps", "touches"]) $(id).addEventListener("input", saveDraft);
 
+  // ---------------------------------------------------------------- your branding (this device only)
+  // Prepared-by name, contact line, accent color, logo (a data: URI) and the "Powered by" switch.
+  // Kept in localStorage, sent to the audit engine only to build the report, never uploaded.
+  const BRAND_KEY = "ouroboros-branding-v1";
+  const MAX_LOGO_BYTES = 1024 * 1024;
+  const DEFAULT_ACCENT = "#1f3a5f";
+  let brand = loadBrand();
+  let pendingLogo = null; // logo shown in the open panel (a data URI), not kept until "Save"
+
+  function loadBrand() {
+    try {
+      const b = JSON.parse(localStorage.getItem(BRAND_KEY) || "{}");
+      return b && typeof b === "object" ? b : {};
+    } catch (_) { return {}; }
+  }
+  function saveBrand() {
+    try {
+      if (Object.keys(brand).length) localStorage.setItem(BRAND_KEY, JSON.stringify(brand));
+      else localStorage.removeItem(BRAND_KEY);
+      return true;
+    } catch (_) { return false; } // storage unavailable or full: branding still applies until the page closes
+  }
+  function brandForEngine() {
+    return {
+      prepared_by: brand.prepared_by || "", contact: brand.contact || "",
+      accent_color: brand.accent_color || "", logo_data: brand.logo_data || "",
+      show_powered_by: brand.show_powered_by !== false,
+    };
+  }
+  function refreshBrandDot() {
+    $("brand-dot").hidden = !(brand.prepared_by || brand.contact || brand.accent_color || brand.logo_data);
+  }
+  refreshBrandDot();
+
+  function showLogoPreview(uri) {
+    const img = $("b-logo-preview");
+    img.hidden = !uri;
+    if (uri) img.src = uri; else img.removeAttribute("src");
+    $("b-logo-clear").hidden = !uri;
+  }
+  function fillBrandForm() {
+    $("b-prepared").value = brand.prepared_by || "";
+    $("b-contact").value = brand.contact || "";
+    $("b-color").value = brand.accent_color || DEFAULT_ACCENT;
+    $("b-color").dataset.unset = brand.accent_color ? "" : "1";
+    $("b-powered").checked = brand.show_powered_by !== false;
+    pendingLogo = brand.logo_data || null;
+    showLogoPreview(pendingLogo);
+    $("b-logo-msg").textContent = "";
+  }
+  function readAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+  // Shrink big pictures so the saved copy stays small; PNG stays PNG (keeps transparency).
+  function downscale(uri, type) {
+    return new Promise((resolve) => {
+      if (type === "image/svg+xml") return resolve(uri);
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 480 / Math.max(img.width, img.height));
+        if (k === 1 && uri.length < 300000) return resolve(uri);
+        try {
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * k));
+          c.height = Math.max(1, Math.round(img.height * k));
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL(type === "image/jpeg" ? "image/jpeg" : "image/png", 0.9));
+        } catch (_) { resolve(uri); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = uri;
+    });
+  }
+
+  const brandDialog = $("brand-dialog");
+  $("brand-open").addEventListener("click", () => {
+    fillBrandForm();
+    if (brandDialog.showModal) brandDialog.showModal(); else brandDialog.setAttribute("open", "");
+  });
+  const closeBrand = () => (brandDialog.close ? brandDialog.close() : brandDialog.removeAttribute("open"));
+  $("brand-cancel").addEventListener("click", closeBrand);
+  $("b-color").addEventListener("input", () => { $("b-color").dataset.unset = ""; });
+  $("b-color-reset").addEventListener("click", () => { $("b-color").value = DEFAULT_ACCENT; $("b-color").dataset.unset = "1"; });
+  $("b-logo-clear").addEventListener("click", () => { pendingLogo = null; showLogoPreview(null); $("b-logo-msg").textContent = ""; });
+  $("b-logo").addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    const msg = $("b-logo-msg");
+    if (!f) return;
+    if (!/^image\/(png|jpeg|svg\+xml)$/.test(f.type) && !/\.(png|jpe?g|svg)$/i.test(f.name)) {
+      msg.textContent = "That isn't a PNG, JPG or SVG picture."; return;
+    }
+    if (f.size > 8 * MAX_LOGO_BYTES) { msg.textContent = "That picture is too big. Pick one under 1 MB."; return; }
+    try {
+      const type = f.type || (/\.svg$/i.test(f.name) ? "image/svg+xml" : /\.png$/i.test(f.name) ? "image/png" : "image/jpeg");
+      let uri = await readAsDataURL(f);
+      uri = uri.replace(/^data:[^;,]*/, "data:" + type);
+      uri = await downscale(uri, type);
+      if (!uri) { msg.textContent = "That picture couldn't be read."; return; }
+      if (uri.length * 0.75 > MAX_LOGO_BYTES) { msg.textContent = "That picture is too big. Pick one under 1 MB."; return; }
+      pendingLogo = uri; showLogoPreview(uri); msg.textContent = "";
+    } catch (_) { msg.textContent = "That picture couldn't be read."; }
+  });
+  $("brand-clear").addEventListener("click", () => {
+    brand = {}; saveBrand(); refreshBrandDot(); fillBrandForm(); closeBrand();
+  });
+  $("brand-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const next = {};
+    const prepared = $("b-prepared").value.trim(), contact = $("b-contact").value.trim();
+    if (prepared) next.prepared_by = prepared;
+    if (contact) next.contact = contact;
+    if ($("b-color").dataset.unset !== "1") next.accent_color = $("b-color").value;
+    if (pendingLogo) next.logo_data = pendingLogo;
+    if (!$("b-powered").checked) next.show_powered_by = false;
+    brand = next;
+    if (!saveBrand()) alert("This browser won't keep your branding after you close it, but it will be used until then.");
+    refreshBrandDot();
+    closeBrand();
+  });
+
   // ---------------------------------------------------------------- interview questions
   function renderQuestions() {
     const box = $("questions");
@@ -255,7 +381,7 @@
     saveAfterRun = false; // the made-up sample company isn't kept in history
     // The sample keeps its own made-up company name and interview answers
     const crm = (document.querySelector('input[name="sample-crm"]:checked') || {}).value || "salesforce";
-    run("runSample", { settings: { client: "", impact: {}, crm } }, [], "Auditing the sample company");
+    run("runSample", { settings: { client: "", impact: {}, crm, branding: brandForEngine() } }, [], "Auditing the sample company");
   });
 
   // ---------------------------------------------------------------- audit history (this device only)
@@ -289,6 +415,7 @@
     const settings = collectSettings();
     const today = new Date().toISOString().slice(0, 10);
     settings.previous = settings.client ? previousFor(settings.client, today) : null;
+    settings.branding = brandForEngine();
     saveAfterRun = true;
     run("runUploaded", { files: payload, settings }, payload.map((p) => p.buffer),
       `Auditing ${settings.client || "the CRM"}`);

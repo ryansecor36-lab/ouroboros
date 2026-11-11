@@ -62,6 +62,26 @@ button, input, select { font: inherit; color: inherit; }
 .engine.is-error { color: var(--bad); }
 @keyframes pulse { 50% { opacity: .3; } }
 
+.bar-right { display: flex; align-items: center; gap: 16px; }
+.btn.small { min-height: 38px; padding: 0 14px; font-size: 15px; position: relative; }
+.btn .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-left: 8px; }
+@media (max-width: 520px) { .engine span { display: none; } }
+
+/* "Your branding" panel */
+dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 22px 24px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); }
+dialog::backdrop { background: rgba(10, 16, 26, .5); }
+dialog form { margin-top: 0; }
+dialog .hint { margin-top: 0; }
+input[type="color"] { width: 56px; height: 44px; padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.color-row, .logo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.logo-row img { max-height: 48px; max-width: 160px; border: 1px solid var(--line); border-radius: 8px; padding: 4px; background: #fff; }
+.logo-row input[type="file"] { max-width: 100%; font-size: 15px; }
+.check { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.check input { width: 22px; height: 22px; }
+.dialog-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.dialog-actions .ghost { margin-right: auto; }
+
 .view { padding-block: 28px 48px; }
 
 /* intro */
