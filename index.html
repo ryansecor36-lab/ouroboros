@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ouroboros</title>
+<title>Uroboric</title>
 <meta name="description" content="Audit a Salesforce, HubSpot or Dynamics 365 CRM's data health right on this device.">
 <meta name="theme-color" content="#1f3a5f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Ouroboros">
+<meta name="apple-mobile-web-app-title" content="Uroboric">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -18,7 +18,7 @@
 <body>
 <header class="bar app-chrome">
   <div class="bar-inner">
-    <div class="brand"><img src="icons/icon-192.png" alt="" width="28" height="28">Ouroboros</div>
+    <div class="brand"><img src="icons/icon-192.png" alt="" width="28" height="28">Uroboric</div>
     <div class="bar-right">
       <button id="brand-open" class="btn small" type="button" aria-haspopup="dialog">Your branding<span id="brand-dot" class="dot" hidden></span></button>
       <div id="engine" class="engine is-loading" role="status" aria-live="polite"><i></i><span>Starting up</span></div>
@@ -56,7 +56,7 @@
       </div>
       <span id="b-logo-msg" class="hint" role="status"></span>
     </div>
-    <label class="check"><input id="b-powered" type="checkbox" checked> Show &ldquo;Powered by Ouroboros&rdquo; on the report</label>
+    <label class="check"><input id="b-powered" type="checkbox" checked> Show &ldquo;Powered by Uroboric&rdquo; on the report</label>
     <div class="dialog-actions">
       <button id="brand-clear" class="btn ghost" type="button">Clear all</button>
       <button id="brand-save" class="btn primary" type="submit" value="save">Save</button>
@@ -182,11 +182,32 @@
         <button id="save-pdf" class="btn" type="button" aria-describedby="pdf-hint">Print or save PDF</button>
         <button id="save-xlsx" class="btn" type="button">Excel details</button>
         <button id="save-kit" class="btn" type="button">Cleanup kit</button>
+        <button id="open-quote" class="btn" type="button" aria-expanded="false" aria-controls="quote-panel">Quote</button>
         <button id="share" class="btn" type="button" hidden>Share</button>
       </div>
     </div>
     <p id="pdf-hint" class="toolbar-hint">To save or send the PDF, tap <b>Share</b> on the print screen.</p>
   </div>
+  <section id="quote-panel" class="quote-panel app-chrome" aria-labelledby="quote-title" hidden>
+    <div class="quote-inner">
+      <div class="quote-head">
+        <h2 id="quote-title">Suggested quote</h2>
+        <button id="quote-close" class="btn ghost small" type="button">Close</button>
+      </div>
+      <p class="hint">For you, not the client. This is never part of the report, the Excel details or the cleanup kit, and it is not printed.</p>
+      <div class="quote-controls">
+        <label class="quote-toggle"><input id="quote-pilot" type="checkbox"> Pilot pricing</label>
+        <label class="quote-reps">Reps <input id="quote-reps" type="number" inputmode="numeric" min="1" step="1" placeholder="unknown"></label>
+      </div>
+      <div id="quote-lines" class="quote-lines" aria-live="polite"></div>
+      <ul id="quote-notes" class="quote-notes"></ul>
+      <div class="quote-actions">
+        <button id="quote-copy" class="btn primary" type="button">Copy quote</button>
+        <span id="quote-copied" class="hint" role="status"></span>
+      </div>
+      <textarea id="quote-fallback" class="quote-fallback" rows="6" readonly hidden aria-label="Quote text to copy"></textarea>
+    </div>
+  </section>
   <div id="report" class="report-host"></div>
 </section>
 

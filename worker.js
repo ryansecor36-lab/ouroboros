@@ -53,6 +53,8 @@ self.onmessage = async (ev) => {
     await ready;
     if (method === "identify") {
       postMessage({ type: "reply", id, value: JSON.parse(web.identify(JSON.stringify(args.names))) });
+    } else if (method === "quote") {
+      postMessage({ type: "reply", id, value: JSON.parse(web.quote_json(JSON.stringify(args.settings))) });
     } else if (method === "runSample") {
       finish(id, web.run_sample(JSON.stringify(args.settings)));
     } else if (method === "runUploaded") {

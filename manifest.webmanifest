@@ -1,6 +1,6 @@
 {
-  "name": "Ouroboros",
-  "short_name": "Ouroboros",
+  "name": "Uroboric",
+  "short_name": "Uroboric",
   "description": "Audit a Salesforce CRM's data health right on this device.",
   "start_url": "./",
   "scope": "./",

@@ -211,11 +211,34 @@ td:first-child { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospac
 .grade-pill { font-weight: 650; font-size: 15px; padding: 6px 14px; border-radius: 999px; background: var(--accent-soft); color: var(--navy); }
 .report-host { display: block; }
 
+/* consultant-only quote panel (hidden when printing: it has the app-chrome class) */
+.quote-panel { background: var(--surface); border-bottom: 1px solid var(--line); }
+.quote-panel[hidden] { display: none; }
+.quote-inner { max-width: 1120px; margin: 0 auto; padding: 14px max(20px, env(safe-area-inset-right, 0px)) 18px max(20px, env(safe-area-inset-left, 0px)); }
+.quote-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.quote-head h2 { font-size: 21px; margin: 0; }
+.quote-controls { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+.quote-toggle, .quote-reps { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.quote-toggle input { width: 22px; height: 22px; }
+.quote-reps input { width: 110px; min-height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--ink); font: inherit; }
+.quote-lines { display: grid; gap: 0; }
+.quote-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.quote-row b { font-weight: 650; }
+.quote-row .amt { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.quote-row .why { grid-column: 1 / -1; color: var(--muted); font-size: 14px; }
+.quote-row.alt, .quote-row.credit { color: var(--muted); }
+.quote-row.total { border-bottom: 0; }
+.quote-notes { margin: 10px 0 0; padding-left: 20px; color: var(--warn); font-size: 14.5px; }
+.quote-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.quote-fallback { width: 100%; margin-top: 10px; font: 14px ui-monospace, Menlo, Consolas, monospace; background: var(--bg);
+  color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+
 @media (prefers-reduced-motion: reduce) {
   .spinner, .engine.is-loading i { animation: none; }
 }
 @media print {
-  .app-chrome, .bar { display: none !important; }
+  .app-chrome, .bar, .quote-panel { display: none !important; }
   body { background: #fff; padding: 0; }
   #view-result { display: block !important; }
 }

@@ -1,4 +1,4 @@
-/* Ouroboros: the app screen. Talks to worker.js, which runs the Python audit. */
+/* Uroboric: the app screen. Talks to worker.js, which runs the Python audit. */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -454,6 +454,7 @@
       htmlFile: new File([result.html], result.html_name, { type: "text/html" }),
     };
     mountReport(result.html);
+    setQuoteOpen(false);
     if (saveAfterRun) remember(result.snapshot);
     $("result-grade").textContent = result.grade
       ? `${result.client}: grade ${result.grade} (${result.score}/100)${result.unscored ? ", preliminary" : ""}`
@@ -463,7 +464,7 @@
     let canShare = false;
     try { canShare = !!(navigator.canShare && navigator.canShare({ files: [last.htmlFile] })); } catch (_) {}
     $("share").hidden = !canShare;
-    document.title = `${result.client} - Ouroboros`;
+    document.title = `${result.client} - Uroboric`;
     show("result");
   }
 
@@ -478,6 +479,70 @@
   $("save-xlsx").addEventListener("click", () => last && download(last.xlsx, last.result.xlsx_name));
   $("save-kit").addEventListener("click", () => last && download(last.kit, last.result.kit_name));
   $("save-pdf").addEventListener("click", () => window.print());
+
+  // ---------------------------------------------------------------- quote (consultant only, never printed)
+  const quoteEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; return e; };
+  let quoteSeq = 0;
+  function renderQuote(q) {
+    const box = $("quote-lines");
+    box.textContent = "";
+    for (const l of q.lines) {
+      const row = quoteEl("div", `quote-row ${l.key}${l.alt ? " alt" : ""}`, "");
+      row.append(quoteEl("b", "", l.label), quoteEl("span", "amt", l.display), quoteEl("span", "why", l.why));
+      box.appendChild(row);
+    }
+    const notes = $("quote-notes");
+    notes.textContent = "";
+    for (const n of q.notes) notes.appendChild(quoteEl("li", "", n));
+    $("quote-fallback").value = q.text;
+    $("quote-copied").textContent = "";
+    if (last) last.quote = q;
+  }
+  async function refreshQuote() {
+    if (!last) return;
+    const mine = ++quoteSeq;
+    const reps = $("quote-reps").value.trim();
+    const settings = { ...last.result.quote_inputs, pilot: $("quote-pilot").checked, reps: reps === "" ? null : Number(reps) };
+    try {
+      const reply = await call("quote", { settings });
+      if (mine === quoteSeq) renderQuote(reply.value);
+    } catch (err) {
+      if (mine === quoteSeq) $("quote-lines").textContent = (err && err.message) || "Couldn't work out the quote.";
+    }
+  }
+  function setQuoteOpen(open) {
+    $("quote-panel").hidden = !open;
+    $("open-quote").setAttribute("aria-expanded", String(open));
+    if (open) refreshQuote();
+  }
+  $("open-quote").addEventListener("click", () => {
+    if (!last) return;
+    const opening = $("quote-panel").hidden;
+    if (opening) {
+      const qi = last.result.quote_inputs || {};
+      $("quote-reps").value = qi.reps == null ? "" : qi.reps;
+      $("quote-pilot").checked = false;
+      renderQuote(last.result.quote);
+    }
+    setQuoteOpen(opening);
+  });
+  $("quote-close").addEventListener("click", () => setQuoteOpen(false));
+  $("quote-pilot").addEventListener("change", refreshQuote);
+  $("quote-reps").addEventListener("input", refreshQuote);
+  $("quote-copy").addEventListener("click", async () => {
+    if (!last || !last.quote) return;
+    const text = last.quote.text, msg = $("quote-copied"), fb = $("quote-fallback");
+    try {
+      await navigator.clipboard.writeText(text);
+      fb.hidden = true; msg.textContent = "Copied.";
+      return;
+    } catch (_) { /* fall through to the select-and-copy fallback */ }
+    try {
+      fb.hidden = false; fb.value = text; fb.focus(); fb.select();
+      fb.setSelectionRange(0, text.length);
+      msg.textContent = document.execCommand && document.execCommand("copy") ? "Copied." : "Select the text below and copy it.";
+    } catch (_) { msg.textContent = "Select the text below and copy it."; }
+  });
   $("share").addEventListener("click", async () => {
     if (!last) return;
     const both = [last.htmlFile, last.xlsxFile];
@@ -485,7 +550,7 @@
     try { await navigator.share({ files: filesToShare, title: `${last.result.client} CRM health report` }); }
     catch (_) { /* the person closed the share sheet */ }
   });
-  $("back").addEventListener("click", () => { document.title = "Ouroboros"; show("start"); });
+  $("back").addEventListener("click", () => { document.title = "Uroboric"; show("start"); });
   window.addEventListener("afterprint", () => {});
 
   // ---------------------------------------------------------------- offline support

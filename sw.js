@@ -1,6 +1,6 @@
 /* Offline support: after the first visit, every app file (including the ~30 MB audit engine)
    is served from this device, so the app works with no internet in a client's office. */
-const VERSION = "112e8412bacf";
+const VERSION = "0d5b70ceba68";
 const FILES = ["./", "app.css", "app.js", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "index.html", "manifest.webmanifest", "py/crm_audit.zip", "py/et_xmlfile-2.0.0-py3-none-any.whl", "py/openpyxl-3.1.5-py2.py3-none-any.whl", "py/phonenumbers-9.0.43-py2.py3-none-any.whl", "py/wheels.json", "pyodide/numpy-2.0.2-cp312-cp312-pyodide_2024_0_wasm32.whl", "pyodide/pandas-2.2.3-cp312-cp312-pyodide_2024_0_wasm32.whl", "pyodide/pyodide-lock.json", "pyodide/pyodide.asm.js", "pyodide/pyodide.asm.wasm", "pyodide/pyodide.js", "pyodide/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", "pyodide/python_stdlib.zip", "pyodide/pytz-2024.1-py2.py3-none-any.whl", "pyodide/six-1.16.0-py2.py3-none-any.whl", "worker.js"];
 const CACHE = "crm-audit-" + VERSION;
 
