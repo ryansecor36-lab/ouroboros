@@ -456,6 +456,10 @@
     mountReport(result.html);
     setQuoteOpen(false);
     if (saveAfterRun) remember(result.snapshot);
+    // A heads-up for the consultant (a CRM not yet checked against a real export): shown here, never in the report
+    const note = $("result-note");
+    note.textContent = (result.consultant_notes || []).join(" ");
+    note.hidden = !note.textContent;
     $("result-grade").textContent = result.grade
       ? `${result.client}: grade ${result.grade} (${result.score}/100)${result.unscored ? ", preliminary" : ""}`
       : result.client;
@@ -479,6 +483,29 @@
   $("save-xlsx").addEventListener("click", () => last && download(last.xlsx, last.result.xlsx_name));
   $("save-kit").addEventListener("click", () => last && download(last.kit, last.result.kit_name));
   $("save-pdf").addEventListener("click", () => window.print());
+
+  // ---------------------------------------------------------------- apply review (returned workbook -> ready-to-load zip)
+  const applyDialog = $("apply-dialog");
+  const openApply = () => { $("apply-msg").textContent = ""; $("apply-file").value = ""; applyDialog.showModal(); };
+  $("apply-open").addEventListener("click", openApply);
+  $("apply-open-2").addEventListener("click", openApply);
+  $("apply-close").addEventListener("click", () => applyDialog.close());
+  $("apply-file").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    const msg = $("apply-msg");
+    if (!f) return;
+    if (!engineReady) { msg.textContent = "The audit engine is still starting. Try again in a moment."; return; }
+    msg.textContent = "Reading the reviewed workbook...";
+    try {
+      const buffer = await f.arrayBuffer();
+      const reply = await call("applyReview", { buffer }, [buffer]);
+      if (reply.value.error) { msg.textContent = reply.value.error; return; }
+      download(new Blob([reply.zip], { type: "application/zip" }), reply.value.zip_name);
+      msg.textContent = reply.value.line;
+    } catch (err) {
+      msg.textContent = (err && err.message) || "Something went wrong reading that file.";
+    }
+  });
 
   // ---------------------------------------------------------------- quote (consultant only, never printed)
   const quoteEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; return e; };

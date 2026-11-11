@@ -55,6 +55,16 @@ self.onmessage = async (ev) => {
       postMessage({ type: "reply", id, value: JSON.parse(web.identify(JSON.stringify(args.names))) });
     } else if (method === "quote") {
       postMessage({ type: "reply", id, value: JSON.parse(web.quote_json(JSON.stringify(args.settings))) });
+    } else if (method === "applyReview") {
+      const dir = web.reset_review_dir();
+      py.FS.writeFile(`${dir}/review.xlsx`, new Uint8Array(args.buffer));
+      const value = JSON.parse(web.apply_uploaded());
+      if (value.error) {
+        postMessage({ type: "reply", id, value });
+      } else {
+        const zip = py.FS.readFile(value.zip_path);
+        postMessage({ type: "reply", id, value, zip: zip.buffer }, [zip.buffer]);
+      }
     } else if (method === "runSample") {
       finish(id, web.run_sample(JSON.stringify(args.settings)));
     } else if (method === "runUploaded") {
