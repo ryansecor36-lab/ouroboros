@@ -210,12 +210,24 @@ const UroboricUpdate = (() => {
     if (s.hasController && s.waiting) return true;
     return !!(s.pageVersion && s.networkVersion && s.pageVersion !== s.networkVersion);
   }
+  const TEXT_OTHER_BUSY = "Uroboric is open with a report in another window. Finish there, or close it, then tap Refresh now.";
+  const TEXT_OTHER_SILENT = "Uroboric is open in another window that isn't responding. Close that window, then tap Refresh now.";
+  const TEXT_UPDATED_ELSEWHERE = "Uroboric was updated in another window. Refresh to continue.";
   const bannerText = (busy) => (busy ? TEXT_BUSY : TEXT);
+  // res: what the service worker found out about the OTHER open windows: {others, replies:[{busy}], silent}.
+  // "busy" (a window with a report open) blocks the update; "silent" (no answer) asks the person; else go.
+  function decideUpdate(res) {
+    if (!res) return "proceed";
+    if ((res.replies || []).some((r) => r && r.busy)) return "busy";
+    if ((res.silent || 0) > 0) return "silent";
+    return "proceed";
+  }
+  const otherWindowText = (decision) => (decision === "busy" ? TEXT_OTHER_BUSY : decision === "silent" ? TEXT_OTHER_SILENT : null);
   function parseVersion(html) {
     const m = /class="[^"]*\bapp-version\b[^"]*"[^>]*>\s*Uroboric\s+([^<\s][^<]*?)\s*</i.exec(String(html || ""));
     return m ? m[1] : null;
   }
-  return { TEXT, TEXT_BUSY, shouldShowUpdate, bannerText, parseVersion };
+  return { TEXT, TEXT_BUSY, TEXT_OTHER_BUSY, TEXT_OTHER_SILENT, TEXT_UPDATED_ELSEWHERE, shouldShowUpdate, bannerText, decideUpdate, otherWindowText, parseVersion };
 })();
 if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricUpdate });
 
@@ -978,11 +990,40 @@ const NEW_HOME = null;
   let swReg = null;
   let refreshRequested = false; // only reload after the person asked: guards against reload loops
   let reloaded = false;
+  let staleWindow = false; // another window updated the app; this one still runs the old files
+  let hasHadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
   const isBusy = () => !$("view-result").hidden || !$("view-working").hidden || !!(tour && tour.isOpen());
   function refreshUpdateText() {
     $("update-text").textContent = UroboricUpdate.bannerText(isBusy());
   }
-  function showUpdateBanner() { refreshUpdateText(); updBanner.hidden = false; }
+  // Other open windows: before switching the app, the waiting worker asks every other window whether it has
+  // a report open. This window answers such questions here.
+  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "ARE_YOU_BUSY?" && e.ports && e.ports[0]) e.ports[0].postMessage({ busy: isBusy() });
+  });
+  function askOtherWindows(worker) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => { if (!done) { done = true; resolve(v); } };
+      try {
+        const ch = new MessageChannel();
+        ch.port1.onmessage = (e) => finish(e.data);
+        worker.postMessage({ type: "CAN_UPDATE?" }, [ch.port2]);
+      } catch (_) { finish(null); }
+      setTimeout(() => finish(null), 4000); // the worker did not answer at all: nothing to go on, so carry on
+    });
+  }
+  function showUpdatedElsewhere() {
+    staleWindow = true;
+    $("update-text").textContent = UroboricUpdate.TEXT_UPDATED_ELSEWHERE;
+    $("update-now").disabled = false;
+    $("update-now").textContent = "Refresh";
+    $("update-later").hidden = true;
+    $("update-anyway").hidden = true;
+    updBanner.hidden = false;
+  }
+  function showUpdateBanner() {
+    if (staleWindow) return; refreshUpdateText(); updBanner.hidden = false; }
   function reloadOnce() { if (reloaded) return; reloaded = true; location.reload(); }
   function evaluateUpdate(networkVersion) {
     const hasController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
@@ -991,7 +1032,7 @@ const NEW_HOME = null;
   }
   async function fetchNetworkVersion() {
     try {
-      const r = await fetch("./index.html?v=" + Date.now(), { cache: "no-store" });
+      const r = await fetch("./index.html?__uroboric_probe=" + Date.now(), { cache: "no-store" });
       return r.ok ? UroboricUpdate.parseVersion(await r.text()) : null;
     } catch (_) { return null; }
   }
@@ -1006,9 +1047,10 @@ const NEW_HOME = null;
       if (worker.state === "installed") evaluateUpdate(null);
     });
   }
-  async function refreshNow() {
-    refreshRequested = true;
+  async function refreshNow(force) {
+    if (staleWindow) { reloadOnce(); return; }
     $("update-now").disabled = true;
+    $("update-anyway").hidden = true;
     $("update-text").textContent = "Updating…";
     try {
       if (!swReg.waiting) { // the page noticed a newer version before its files finished downloading
@@ -1017,16 +1059,33 @@ const NEW_HOME = null;
           await new Promise((res) => { w.addEventListener("statechange", () => w.state === "installed" && res()); setTimeout(res, 90000); });
         }
       }
-      if (swReg.waiting) { swReg.waiting.postMessage({ type: "SKIP_WAITING" }); setTimeout(reloadOnce, 4000); } // controllerchange reloads; this is the fallback
-      else reloadOnce();
-    } catch (_) { reloadOnce(); }
+      if (!swReg.waiting) { refreshRequested = true; reloadOnce(); return; }
+      if (force !== true) {
+        const decision = UroboricUpdate.decideUpdate(await askOtherWindows(swReg.waiting));
+        const text = UroboricUpdate.otherWindowText(decision);
+        if (text) {
+          $("update-text").textContent = text;
+          $("update-now").disabled = false;
+          $("update-anyway").hidden = decision !== "silent";
+          return;
+        }
+      }
+      refreshRequested = true;
+      swReg.waiting.postMessage({ type: "SKIP_WAITING" });
+      setTimeout(reloadOnce, 4000); // controllerchange reloads; this is the fallback
+    } catch (_) { refreshRequested = true; reloadOnce(); }
   }
-  $("update-now").addEventListener("click", refreshNow);
+  $("update-now").addEventListener("click", () => refreshNow(false));
+  $("update-anyway").addEventListener("click", () => refreshNow(true));
   $("update-later").addEventListener("click", () => { updBanner.hidden = true; });
   window.UroboricCheckForUpdate = checkForUpdate; // lets a test or the console trigger the same check
 
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (refreshRequested) reloadOnce(); });
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshRequested) reloadOnce();
+      else if (!hasHadController) hasHadController = true; // the first install taking control of this page
+      else showUpdatedElsewhere(); // never reload by itself: the person may be mid-report
+    });
     navigator.serviceWorker.register("sw.js").then((reg) => {
       swReg = reg;
       watchInstalling(reg.installing);
