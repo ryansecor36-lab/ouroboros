@@ -231,6 +231,39 @@ const UroboricUpdate = (() => {
 })();
 if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricUpdate });
 
+/* "Start another client": what is cleared and what is kept. Pure functions so tests/js/session.test.mjs can run
+   them under Node. One client's files, answers, result, quote and draft never carry over to the next client.
+   Kept: the consultant's own branding and the saved audit history (scores and counts only). */
+const UroboricSession = (() => {
+  const DRAFT_KEY = "crm-audit-draft-v1";
+  const KEPT_KEYS = ["ouroboros-branding-v1", "ouroboros-history-v1", "crm-audit-loaded-once"];
+  const CLEARED_FIELDS = ["files", "kinds", "client", "reps", "touches", "draft", "last", "quote", "tourOpen",
+    "reportHtml", "applyMessage", "saveAfterRun", "tourAfterRun"];
+  const name = (c) => String(c || "").trim();
+  const emptyDraft = () => ({ client: "", impact: { reps: null, touches_per_rep_per_day: null }, manual_scores: {}, measured: {} });
+  const confirmText = (client) =>
+    `This clears ${name(client) ? name(client) + "'s" : "this client's"} files and answers from this screen. Saved history and your branding are kept.`;
+  // state in, new state out: every CLEARED_FIELDS entry is reset, every other entry (brand, history...) is passed through
+  function blankState(state) {
+    const next = Object.assign({}, state);
+    Object.assign(next, { files: new Map(), kinds: {}, client: "", reps: "", touches: "", draft: emptyDraft(), last: null,
+      quote: null, tourOpen: false, reportHtml: "", applyMessage: "", saveAfterRun: false, tourAfterRun: false });
+    return next;
+  }
+  // storage: anything with getItem/removeItem. Removes the client's draft only.
+  function clearStorage(storage) {
+    let removed = false;
+    try { if (storage.getItem(DRAFT_KEY) !== null) { storage.removeItem(DRAFT_KEY); removed = true; } } catch (_) { /* unavailable */ }
+    return { removed, kept: KEPT_KEYS.filter((k) => { try { return storage.getItem(k) !== null; } catch (_) { return false; } }) };
+  }
+  // The name to show on the start screen when a draft from before was restored and not yet changed
+  function bannerClient(restored, current) {
+    return name(restored) && name(restored) === name(current) ? name(restored) : "";
+  }
+  return { DRAFT_KEY, KEPT_KEYS, CLEARED_FIELDS, emptyDraft, confirmText, blankState, clearStorage, bannerClient };
+})();
+if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricSession });
+
 /* Set to "https://app.uroboric.com/" when the app moves. On any other address the app then shows a
    banner that walks the user through backing up here and restoring there. null = off. */
 const NEW_HOME = null;
@@ -309,11 +342,18 @@ const NEW_HOME = null;
   function saveDraft() {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(collectSettings())); } catch (_) {}
   }
-  const draft = loadDraft();
+  let draft = loadDraft();
+  const restoredClient = draft.client || "";   // a draft from before: show whose it is on the start screen
   $("client").value = draft.client || "";
   $("reps").value = (draft.impact && draft.impact.reps) || "";
   $("touches").value = (draft.impact && draft.impact.touches_per_rep_per_day) || "";
-  for (const id of ["client", "reps", "touches"]) $(id).addEventListener("input", saveDraft);
+  function refreshPrevClient() {
+    const who = UroboricSession.bannerClient(restoredClient, $("client").value);
+    $("prev-client").hidden = !who;
+    $("prev-client-name").textContent = who;
+  }
+  for (const id of ["client", "reps", "touches"]) $(id).addEventListener("input", () => { saveDraft(); refreshPrevClient(); });
+  refreshPrevClient();
 
   // ---------------------------------------------------------------- your branding (this device only)
   // Prepared-by name, contact line, accent color, logo (a data: URI) and the "Powered by" switch.
@@ -888,23 +928,52 @@ const NEW_HOME = null;
   $("save-pdf").addEventListener("click", () => window.print());
 
   // ---------------------------------------------------------------- apply review (returned workbook -> ready-to-load zip)
+  // The zip is only downloaded after the person has seen "What will change" and tapped Download.
   const applyDialog = $("apply-dialog");
-  const openApply = () => { $("apply-msg").textContent = ""; $("apply-file").value = ""; applyDialog.showModal(); };
+  let pendingApply = null; // { blob, name, line } waiting for the person's OK
+  function resetApplyDialog() {
+    pendingApply = null;
+    $("apply-msg").textContent = ""; $("apply-file").value = "";
+    $("apply-summary").textContent = ""; $("apply-warnings").textContent = "";
+    $("apply-review-box").hidden = true;
+  }
+  const openApply = () => { resetApplyDialog(); applyDialog.showModal(); };
   $("apply-open").addEventListener("click", openApply);
   $("apply-open-2").addEventListener("click", openApply);
-  $("apply-close").addEventListener("click", () => applyDialog.close());
+  $("apply-close").addEventListener("click", () => { resetApplyDialog(); applyDialog.close(); });
+  $("apply-cancel").addEventListener("click", () => {
+    resetApplyDialog();
+    $("apply-msg").textContent = "Cancelled. Nothing was downloaded.";
+  });
+  $("apply-go").addEventListener("click", () => {
+    if (!pendingApply) return;
+    download(pendingApply.blob, pendingApply.name);
+    $("apply-msg").textContent = pendingApply.line;
+    $("apply-review-box").hidden = true;
+    pendingApply = null;
+  });
   $("apply-file").addEventListener("change", async (e) => {
     const f = e.target.files[0];
     const msg = $("apply-msg");
+    $("apply-review-box").hidden = true; pendingApply = null;
     if (!f) return;
     if (!engineReady) { msg.textContent = "The audit engine is still starting. Try again in a moment."; return; }
     msg.textContent = "Reading the reviewed workbook...";
     try {
       const buffer = await f.arrayBuffer();
-      const reply = await call("applyReview", { buffer }, [buffer]);
+      const manifest = last && last.result && last.result.manifest ? last.result.manifest : null;
+      const reply = await call("applyReview", { buffer, manifest }, [buffer]);
       if (reply.value.error) { msg.textContent = reply.value.error; return; }
-      download(new Blob([reply.zip], { type: "application/zip" }), reply.value.zip_name);
-      msg.textContent = reply.value.line;
+      const sm = reply.value.summary;
+      pendingApply = { blob: new Blob([reply.zip], { type: "application/zip" }), name: reply.value.zip_name, line: reply.value.line };
+      $("apply-summary").textContent = sm.approval.join("\n");
+      const ul = $("apply-warnings");
+      ul.textContent = "";
+      for (const w of sm.warnings.slice(0, 6)) { const li = document.createElement("li"); li.textContent = w; ul.appendChild(li); }
+      if (sm.warnings.length > 6) { const li = document.createElement("li"); li.textContent = `...and ${sm.warnings.length - 6} more (listed in the zip's CHECKLIST.txt).`; ul.appendChild(li); }
+      $("apply-review-box").hidden = false;
+      msg.textContent = "Check what will change, then download the load files.";
+      $("apply-go").focus();
     } catch (err) {
       msg.textContent = (err && err.message) || "Something went wrong reading that file.";
     }
@@ -980,7 +1049,45 @@ const NEW_HOME = null;
     try { await navigator.share({ files: filesToShare, title: `${last.result.client} CRM health report` }); }
     catch (_) { /* the person closed the share sheet */ }
   });
+  // "Edit this audit": back to the form with everything kept
   $("back").addEventListener("click", () => { document.title = "Uroboric"; show("start"); });
+
+  // "Start another client": nothing from the previous client stays on this device's screen or in the worker
+  const newClientDialog = $("newclient-dialog");
+  function askStartAnother() {
+    $("newclient-text").textContent = UroboricSession.confirmText($("client").value || (last && last.result.client));
+    openDialog(newClientDialog);
+    $("newclient-cancel").focus();
+  }
+  $("new-client").addEventListener("click", askStartAnother);
+  $("prev-client-new").addEventListener("click", askStartAnother);
+  $("newclient-cancel").addEventListener("click", () => closeDialog(newClientDialog));
+  $("newclient-yes").addEventListener("click", async () => {
+    const next = UroboricSession.blankState({ files, kinds, client: $("client").value, last, draft });
+    if (tour && tour.isOpen()) tour.stop(false);
+    files.clear();
+    kinds = next.kinds; draft = next.draft; last = null; quoteSeq++;
+    saveAfterRun = next.saveAfterRun; tourAfterRun = next.tourAfterRun;
+    for (const id of ["client", "reps", "touches"]) $(id).value = "";
+    UroboricSession.clearStorage(storageOrNull() || { getItem() { return null; }, removeItem() {} });
+    renderQuestions();                       // reads the (now empty) draft: every answer back to "Not asked"
+    refreshFiles();
+    const host = $("report");
+    if (host.shadowRoot) host.shadowRoot.innerHTML = "";
+    setQuoteOpen(false);
+    $("quote-lines").textContent = ""; $("quote-notes").textContent = "";
+    $("quote-fallback").value = ""; $("quote-fallback").hidden = true; $("quote-copied").textContent = "";
+    $("quote-reps").value = ""; $("quote-pilot").checked = false;
+    $("result-grade").textContent = ""; $("result-note").textContent = ""; $("result-note").hidden = true;
+    $("share").hidden = true;
+    resetApplyDialog();
+    document.title = "Uroboric";
+    refreshPrevClient();
+    closeDialog(newClientDialog);
+    show("start");
+    try { await call("resetWorkspace", {}); }
+    catch (_) { alert("The screen is cleared, but the audit engine couldn't delete its working copy of the last client's files. Reload this page to clear it."); }
+  });
   window.addEventListener("afterprint", () => {});
 
   // ---------------------------------------------------------------- offline support and updates

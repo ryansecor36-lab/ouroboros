@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Uroboric</title>
-<meta name="description" content="Audit a Salesforce, HubSpot, Dynamics 365 or Bullhorn CRM's data health right on this device.">
+<meta name="description" content="Audit a Salesforce, HubSpot, Dynamics 365 or Bullhorn (pilot) CRM's data health right on this device.">
 <meta name="theme-color" content="#1f3a5f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -98,15 +98,32 @@
   </div>
 </dialog>
 
+<dialog id="newclient-dialog" class="app-chrome" aria-labelledby="newclient-h">
+  <h2 id="newclient-h">Start another client?</h2>
+  <p id="newclient-text" class="hint"></p>
+  <div class="dialog-actions">
+    <button id="newclient-cancel" class="btn" type="button">Cancel</button>
+    <button id="newclient-yes" class="btn primary" type="button">Start another client</button>
+  </div>
+</dialog>
+
 <dialog id="apply-dialog" class="app-chrome" aria-labelledby="apply-h">
   <h2 id="apply-h">Apply review</h2>
   <p class="hint">Choose the <b>Cleanup_review.xlsx</b> the client sent back. You get a zip of ready-to-load
-    files and a one-page checklist. Everything stays on this device.</p>
+    files and a one-page checklist. The workbook is read on this device and is not uploaded.</p>
   <div class="field">
     <label for="apply-file">Reviewed workbook (.xlsx)</label>
     <input id="apply-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
   </div>
   <p id="apply-msg" class="hint" role="status" aria-live="polite"></p>
+  <div id="apply-review-box" hidden>
+    <pre id="apply-summary" class="apply-summary"></pre>
+    <ul id="apply-warnings" class="apply-warnings"></ul>
+    <div class="dialog-actions">
+      <button id="apply-cancel" class="btn" type="button">Cancel</button>
+      <button id="apply-go" class="btn primary" type="button">Download load files</button>
+    </div>
+  </div>
   <div class="dialog-actions">
     <button id="apply-close" class="btn" type="button">Close</button>
   </div>
@@ -116,7 +133,7 @@
   <form id="brand-form" method="dialog" novalidate>
     <h2 id="brand-h">Your branding</h2>
     <p class="hint">Put your own name and logo on the reports you hand to clients. All optional.
-      Saved on this device only; it never leaves it.</p>
+      Saved on this device only.</p>
     <div class="field">
       <label for="b-prepared">Prepared by</label>
       <input id="b-prepared" type="text" autocomplete="organization" placeholder="For example, Acme IT Services">
@@ -154,13 +171,18 @@
 <main id="view-start" class="view app-chrome">
   <section class="intro">
     <h1>How healthy is this CRM?</h1>
-    <p class="lede">Load a company's Salesforce, HubSpot, Dynamics 365 or Bullhorn exports and get a plain-English report in about a minute:
+    <p class="lede">Load a company's Salesforce, HubSpot, Dynamics 365 or Bullhorn (pilot) exports and get a plain-English report in about a minute:
       a grade, what bad data costs the sales team, and what to fix first.</p>
     <p class="privacy">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="10" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-      Everything runs on this device. Customer data is never uploaded anywhere.
+      The audit runs on this device. Customer data is not uploaded.
     </p>
   </section>
+
+  <p id="prev-client" class="prev-client" role="status" hidden>
+    <span>Left over from last time: <b id="prev-client-name"></b></span>
+    <button id="prev-client-new" class="btn small" type="button">Start another client</button>
+  </p>
 
   <div class="paths">
     <section class="card demo" aria-labelledby="demo-h">
@@ -172,7 +194,7 @@
         <input type="radio" name="sample-crm" id="sc-salesforce" value="salesforce" checked><label for="sc-salesforce">Salesforce</label>
         <input type="radio" name="sample-crm" id="sc-hubspot" value="hubspot"><label for="sc-hubspot">HubSpot</label>
         <input type="radio" name="sample-crm" id="sc-dynamics" value="dynamics"><label for="sc-dynamics">Dynamics 365</label>
-        <input type="radio" name="sample-crm" id="sc-bullhorn" value="bullhorn"><label for="sc-bullhorn">Bullhorn</label>
+        <input type="radio" name="sample-crm" id="sc-bullhorn" value="bullhorn"><label for="sc-bullhorn" title="Bullhorn support is in pilot: we confirm on your export before quoting.">Bullhorn (pilot)</label>
       </div>
       <ul class="demo-facts">
         <li><b>41</b> checks</li>
@@ -208,7 +230,7 @@
           <label class="drop" for="files" id="drop">
             <input id="files" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple aria-labelledby="files-label">
             <strong>Choose files</strong>
-            <span>Salesforce, HubSpot, Dynamics 365 or Bullhorn exports from Files, email or AirDrop: contacts, companies, deals, leads, users</span>
+            <span>Salesforce, HubSpot, Dynamics 365 or Bullhorn (pilot) exports from Files, email or AirDrop: contacts, companies, deals, leads, users</span>
           </label>
           <ul id="file-list" class="files" aria-live="polite"></ul>
         </div>
@@ -236,7 +258,7 @@
             <td>The three export files, unrenamed</td></tr>
           <tr><td>Dynamics 365</td><td>Open each view &gt; Export to Excel (Active Contacts, Accounts, Opportunities, Leads, Users)</td>
             <td>The Excel files, unrenamed</td></tr>
-          <tr><td>Bullhorn</td><td>Each list (Client Contacts, Companies, Opportunities, Leads, Users) &gt; Columns: tick every field &gt; select all &gt; Selected &gt; Export as CSV. Not the Candidates list.</td>
+          <tr><td title="Bullhorn support is in pilot: we confirm on your export before quoting.">Bullhorn (pilot)</td><td>Each list (Client Contacts, Companies, Opportunities, Leads, Users) &gt; Columns: tick every field &gt; select all &gt; Selected &gt; Export as CSV. Not the Candidates list.</td>
             <td>The CSV files, unrenamed</td></tr>
         </tbody>
       </table>
@@ -268,7 +290,8 @@
 <section id="view-result" class="view result" hidden>
   <div class="toolbar app-chrome">
     <div class="toolbar-inner">
-      <button id="back" class="btn ghost" type="button">&larr; New audit</button>
+      <button id="back" class="btn ghost" type="button">&larr; Edit this audit</button>
+      <button id="new-client" class="btn" type="button" aria-haspopup="dialog">Start another client</button>
       <div id="result-grade" class="grade-pill"></div>
       <div id="result-note" class="toolbar-hint" role="status" hidden></div>
       <div class="actions">
@@ -306,7 +329,7 @@
   <div id="report" class="report-host"></div>
 </section>
 
-<p class="hint app-version">Uroboric 1.1.2</p>
+<p class="hint app-version">Uroboric 1.2.0</p>
 
 <script src="tour.js"></script>
 <script src="app.js"></script>

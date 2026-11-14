@@ -55,9 +55,13 @@ self.onmessage = async (ev) => {
       postMessage({ type: "reply", id, value: JSON.parse(web.identify(JSON.stringify(args.names))) });
     } else if (method === "quote") {
       postMessage({ type: "reply", id, value: JSON.parse(web.quote_json(JSON.stringify(args.settings))) });
+    } else if (method === "resetWorkspace") {
+      // "Start another client": delete the uploaded exports, reports, kits and load files this worker still holds
+      postMessage({ type: "reply", id, value: JSON.parse(web.reset_workspace()) });
     } else if (method === "applyReview") {
       const dir = web.reset_review_dir();
       py.FS.writeFile(`${dir}/review.xlsx`, new Uint8Array(args.buffer));
+      if (args.manifest) py.FS.writeFile(`${dir}/review.manifest.json`, args.manifest); // the kit's own record, if this screen still has it
       const value = JSON.parse(web.apply_uploaded());
       if (value.error) {
         postMessage({ type: "reply", id, value });
