@@ -264,6 +264,244 @@ const UroboricSession = (() => {
 })();
 if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricSession });
 
+/* "Check your files": what each chosen file is, what blocks the run and what only deserves a warning.
+   Pure functions so tests/js/files.test.mjs can run them under Node. The audit engine (Python) supplies the
+   facts about each file (inspect_files); everything the person reads on the screen is decided here. */
+const UroboricFiles = (() => {
+  const OPTIONS = [
+    { value: "contacts", label: "Contacts" },
+    { value: "accounts", label: "Companies (accounts)" },
+    { value: "opportunities", label: "Deals (opportunities)" },
+    { value: "leads", label: "Leads" },
+    { value: "users", label: "Users" },
+    { value: "tasks", label: "Activities" },
+    { value: "opportunity_history", label: "Deal history" },
+    { value: "skip", label: "Don't use this file" },
+  ];
+  // Kinds the engine can detect from a name but that aren't in the everyday list: shown only when they apply
+  const EXTRA = { contact_roles: "Deal contacts", job_orders: "Job orders (Bullhorn)" };
+  const CORE = ["contacts", "accounts", "opportunities", "leads"];
+  const CRMS = [
+    { value: "salesforce", label: "Salesforce" }, { value: "hubspot", label: "HubSpot" },
+    { value: "dynamics", label: "Dynamics 365" }, { value: "bullhorn", label: "Bullhorn (pilot)" },
+  ];
+  const crmName = (k) => (CRMS.find((c) => c.value === k) || {}).label || "";
+  const tableLabel = (t) => (OPTIONS.find((o) => o.value === t) || {}).label || EXTRA[t] || "";
+  const optionsFor = (table) => (EXTRA[table] ? OPTIONS.slice(0, -1).concat([{ value: table, label: EXTRA[table] }, OPTIONS[OPTIONS.length - 1]]) : OPTIONS);
+  const num = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const plural = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
+  const sentence = (list) => (list.length < 2 ? list.join("") : list.slice(0, -1).join(", ") + " and " + list[list.length - 1]);
+
+  // One row. f: a file's facts from the engine. chosen: what the person picked in the drop-down for it, or undefined.
+  function rowStatus(f, chosen) {
+    if (chosen === "skip") return { status: "skip", note: "Not used in the audit.", blocks: false };
+    if (f.error) {
+      if (f.error_kind === "empty") return { status: "warn", note: "Empty file: there is nothing in it.", blocks: !!f.table };
+      return { status: "error", note: "Couldn't be read: " + String(f.error).replace(/^'[^']*'\s*/, "").replace(/\s+/g, " ").trim(), blocks: true };
+    }
+    if (!f.table) return { status: "warn", note: "Not recognized: tell us what this is, or set it to Don't use this file.", blocks: false };
+    if (!f.rows) return { status: "warn", note: "Empty file: it has no rows.", blocks: true };
+    const label = tableLabel(f.table);
+    if (!f.useful) {
+      const core = CORE.includes(f.table);
+      return { status: "warn", note: `None of the columns look like ${label} columns. Is this the right kind of file?`, blocks: core };
+    }
+    const note = `${plural(f.rows, "row", "rows")} · ${plural(f.useful, "useful column", "useful columns")} found`;
+    if (f.bad_lines) return { status: "warn", note: note + ` · ${plural(f.bad_lines, "damaged line", "damaged lines")} skipped`, blocks: false };
+    return { status: "ok", note, blocks: false };
+  }
+
+  // Tables with more than one file assigned: {contacts: ["a.csv", "b.csv"]}
+  function duplicates(files) {
+    const by = {};
+    for (const f of files) if (f.table && f.table !== "skip") (by[f.table] = by[f.table] || []).push(f.name);
+    const out = {};
+    for (const [t, names] of Object.entries(by)) if (names.length > 1) out[t] = names;
+    return out;
+  }
+
+  // What blocks the run and what is only worth a heads-up. chosen: {name: table|"skip"} picked by the person.
+  function checkSet(files, chosen) {
+    chosen = chosen || {};
+    const blockers = [], warnings = [];
+    const rows = files.map((f) => ({ f, s: rowStatus(f, chosen[f.name]) }));
+    const used = files.filter((f) => f.table && chosen[f.name] !== "skip");
+    const dups = duplicates(used);
+    for (const [t, names] of Object.entries(dups)) {
+      const many = names.length > 2 ? `${names.length} files are` : "Two files are";
+      blockers.push(`${many} marked as ${tableLabel(t)}. Pick one, or set the other${names.length > 2 ? "s" : ""} to Don't use this file.`);
+    }
+    for (const { f, s } of rows) {
+      if (!s.blocks || (f.table && dups[f.table])) continue;
+      if (s.status === "error") blockers.push(`${f.name}: ${s.note} Set it to Don't use this file, or choose it again.`);
+      else blockers.push(`${f.name}: ${s.note.replace(/\.$/, "")}. Set it to Don't use this file, or choose a different file.`);
+    }
+    const has = (t) => used.some((f) => f.table === t && !f.error && f.rows);
+    if (!used.some((f) => f.table === "contacts")) {
+      blockers.push("There is no Contacts file. Pick which file holds the contacts, or choose different files.");
+    }
+    if (used.some((f) => f.table === "contacts")) {
+      if (!has("accounts")) warnings.push("No Companies file: duplicate-company and company-link checks will be skipped.");
+      if (!has("opportunities") && !has("job_orders")) warnings.push("No Deals file: the pipeline checks will be skipped.");
+      if (!has("users")) warnings.push("No Users file: owner checks will be limited.");
+    }
+    for (const { f, s } of rows) {
+      if (chosen[f.name] === "skip") continue;
+      if (s.status === "warn" && !s.blocks && !f.table) warnings.push(`${f.name} isn't being used because it wasn't recognized.`);
+      if (f.bad_lines && f.table) warnings.push(`${f.name}: ${plural(f.bad_lines, "line", "lines")} had the wrong number of columns and ${f.bad_lines === 1 ? "was" : "were"} skipped, so the numbers may be slightly low.`);
+    }
+    const seen = [...new Set(used.map((f) => f.crm).filter(Boolean))];
+    if (seen.length > 1) {
+      const per = used.filter((f) => f.crm).map((f) => `${f.name} looks like ${crmName(f.crm)}`);
+      warnings.push(`These files look like they come from different CRMs (${sentence(per)}). Check they all belong to one client.`);
+    }
+    return { blockers, warnings, canRun: blockers.length === 0, rows };
+  }
+
+  // The name -> kind map sent to the engine: what the person (or the file name) says, "skip" for the rest
+  function fileMap(files, chosen) {
+    const map = {};
+    for (const f of files) map[f.name] = (chosen && chosen[f.name]) || f.table || f.detected || "skip";
+    return map;
+  }
+
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  function fmtDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}` : String(iso || "");
+  }
+  // dates: the engine's date facts. choice: "dmy" when the person ticked "day/month/year", else anything.
+  function dateReading(dates, choice) {
+    if (!dates || !dates.slash_dates) return null;
+    if (dates.proof) {
+      const dmy = dates.proof === "dmy";
+      return { toggle: false, order: dates.proof, examples: [],
+        text: dmy ? "Dates are read as day/month/year: some dates in the files (like 31/12/2026) show that is the order."
+                  : "Dates are read as month/day/year: some dates in the files (like 12/31/2026) show that is the order." };
+    }
+    if (dates.mixed) return { toggle: false, order: "mdy", examples: [], text: "The files use dates in more than one order. They will be read as month/day/year." };
+    if (!dates.has_ambiguous) return null;
+    const order = choice === "dmy" ? "dmy" : "mdy";
+    return { toggle: true, order,
+      text: "Some dates could be read two ways. Check an example, and tick the box if the order is wrong.",
+      examples: dates.examples.slice(0, 3).map((e) => `${e.raw} → ${fmtDate(order === "dmy" ? e.dmy : e.mdy)}`) };
+  }
+
+  // Reps and calls per rep: left empty, the report has no dollar figures
+  const empty = (v) => v === "" || v === null || v === undefined || !(Number(v) > 0);
+  function typicalNote(reps, touches) {
+    if (!empty(reps) && !empty(touches)) return "";
+    return "Leave these empty and the report skips the dollar figures. Typical teams have about 10 reps making 60 calls and emails a day. Enter this team's own numbers so the dollar figures fit them.";
+  }
+  function costNote(reps, touches) {
+    return empty(reps) || empty(touches) ? "No dollar figures in the report yet: enter this team's reps and calls per rep on the first screen." : "";
+  }
+
+  return { OPTIONS, CRMS, CORE, crmName, tableLabel, optionsFor, rowStatus, duplicates, checkSet, fileMap, fmtDate, dateReading, typicalNote, costNote };
+})();
+if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricFiles });
+
+/* Client names: history is keyed by the typed company name, so a typo quietly loses the "since last audit"
+   comparison. These functions find saved clients that match what was typed, or nearly match. Pure (Node tests). */
+const UroboricClients = (() => {
+  const SUFFIXES = new Set(["inc", "incorporated", "llc", "ltd", "limited", "corp", "corporation", "co", "company", "plc", "lp", "llp", "the"]);
+  function normalize(s) {
+    const words = String(s || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+    const kept = words.filter((w) => !SUFFIXES.has(w));
+    return (kept.length ? kept : words).join(" ");
+  }
+  function distance(a, b) {
+    if (a === b) return 0;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  // history: {key: [{client, audit_date}, ...]} as saved on this device -> [{key, name, count, last}]
+  function list(history) {
+    const out = [];
+    for (const [key, snaps] of Object.entries(history || {})) {
+      if (!Array.isArray(snaps) || !snaps.length) continue;
+      const lastSnap = snaps[snaps.length - 1] || {};
+      out.push({ key, name: String(lastSnap.client || key), count: snaps.length, last: lastSnap.audit_date || "" });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function shortDate(iso, today) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    if (!m) return "";
+    const year = String(today || "").slice(0, 4);
+    return `${MON[Number(m[2]) - 1]} ${Number(m[3])}${m[1] !== year ? ", " + m[1] : ""}`;
+  }
+  function describe(c, today) {
+    return `${c.name} — ${c.count} earlier audit${c.count === 1 ? "" : "s"}, last ${shortDate(c.last, today)}`;
+  }
+  // Saved clients that start with, or contain, what is being typed
+  function suggestions(typed, clients, limit) {
+    const t = String(typed || "").trim().toLowerCase(), n = normalize(typed);
+    if (!t) return [];
+    return clients.filter((c) => c.key.includes(t) || (n && normalize(c.name).includes(n))).slice(0, limit || 6);
+  }
+  // kind: blank | match (same name as a saved client) | suggest (nearly the same) | none
+  function check(typed, clients) {
+    const t = String(typed || "").trim();
+    if (!t) return { kind: "blank" };
+    const exact = clients.find((c) => c.key === t.toLowerCase());
+    if (exact) return { kind: "match", client: exact };
+    const n = normalize(t);
+    if (!n) return { kind: "none" };
+    const same = clients.find((c) => normalize(c.name) === n);
+    if (same) return { kind: "suggest", client: same };
+    let best = null, bestD = Infinity;
+    for (const c of clients) {
+      const cn = normalize(c.name);
+      const d = distance(n, cn);
+      const limit = Math.min(n.length, cn.length) >= 9 ? 2 : Math.min(n.length, cn.length) >= 4 ? 1 : 0;
+      if (d <= limit && d < bestD) { best = c; bestD = d; }
+    }
+    return best ? { kind: "suggest", client: best } : { kind: "none" };
+  }
+  function message(res, today) {
+    if (res.kind === "match") return `Matches ${res.client.count} earlier audit${res.client.count === 1 ? "" : "s"} of ${res.client.name} (last ${shortDate(res.client.last, today)}). The report will show progress since then.`;
+    if (res.kind === "suggest") return `Did you mean ${res.client.name}? It has ${res.client.count} earlier audit${res.client.count === 1 ? "" : "s"}.`;
+    if (res.kind === "none") return "No earlier audit under this name. This will be saved as a new client.";
+    return "";
+  }
+  return { normalize, distance, list, shortDate, describe, suggestions, check, message };
+})();
+if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricClients });
+
+/* Drop-down menus (More, Share / PDF, the narrow-screen Menu): what happens to the open/closed state and to
+   keyboard focus. Pure, so tests/js/files.test.mjs can run it under Node. */
+const UroboricMenu = (() => {
+  // events: toggle | escape | outside | choose | tab. focus: where focus goes next ("first" item, back to the "button", or null)
+  function reduce(state, event) {
+    const open = !!(state && state.open);
+    switch (event) {
+      case "toggle": return { open: !open, focus: open ? "button" : "first" };
+      case "escape": return { open: false, focus: open ? "button" : null };
+      case "choose": return { open: false, focus: null };
+      case "outside": case "tab": return { open: false, focus: null };
+      default: return { open, focus: null };
+    }
+  }
+  // Arrow keys inside the open menu: returns the item to focus
+  function moveFocus(index, count, key) {
+    if (!count) return -1;
+    if (key === "Home") return 0;
+    if (key === "End") return count - 1;
+    if (key === "ArrowDown") return (index + 1) % count;
+    if (key === "ArrowUp") return (index - 1 + count) % count;
+    return index;
+  }
+  return { reduce, moveFocus };
+})();
+if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricMenu });
+
 /* Set to "https://app.uroboric.com/" when the app moves. On any other address the app then shows a
    banner that walks the user through backing up here and restoring there. null = off. */
 const NEW_HOME = null;
@@ -279,7 +517,7 @@ const NEW_HOME = null;
   const DRAFT_KEY = "crm-audit-draft-v1";
 
   // ---------------------------------------------------------------- worker plumbing
-  const worker = new Worker("worker.js");
+  let worker = null;
   const pending = new Map();
   let nextId = 1;
   let engineReady = false;
@@ -294,17 +532,23 @@ const NEW_HOME = null;
     });
   }
 
-  worker.onmessage = (ev) => {
-    const m = ev.data;
-    if (m.type === "engine") return setEngine(m);
-    if (m.type === "progress") return onProgress && onProgress(m.text);
-    const p = pending.get(m.id);
-    if (!p) return;
-    pending.delete(m.id);
-    if (m.type === "error") p.reject(m);
-    else p.resolve(m);
-  };
-  worker.onerror = (e) => setEngine({ state: "error", text: "The audit engine stopped", detail: e.message });
+  function spawnWorker() {
+    const w = new Worker("worker.js");
+    worker = w;
+    w.onmessage = (ev) => {
+      if (w !== worker) return; // a worker that was cancelled
+      const m = ev.data;
+      if (m.type === "engine") return setEngine(m);
+      if (m.type === "progress") return onProgress && onProgress(m.text);
+      const p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id);
+      if (m.type === "error") p.reject(m);
+      else p.resolve(m);
+    };
+    w.onerror = (e) => { if (w === worker) setEngine({ state: "error", text: "The audit engine stopped", detail: e.message }); };
+  }
+  spawnWorker();
 
   function setEngine(m) {
     const el = $("engine");
@@ -316,6 +560,7 @@ const NEW_HOME = null;
       checklist = m.checklist || [];
       renderQuestions();
       refreshFiles();
+      if (typeof check !== "undefined" && !$("view-check").hidden && files.size) inspectNow();
       try { localStorage.setItem("crm-audit-loaded-once", "1"); } catch (_) {}
     }
     if (m.state === "error") {
@@ -330,7 +575,7 @@ const NEW_HOME = null;
   let tour = null; // the Guided demo controller, created below
   function show(view) {
     if (tour && tour.isOpen()) tour.stop(false);
-    for (const v of ["start", "working", "error", "result"]) $("view-" + v).hidden = v !== view;
+    for (const v of ["start", "check", "working", "error", "result"]) $("view-" + v).hidden = v !== view;
     window.scrollTo(0, 0);
     try { refreshUpdateText(); } catch (_) { /* not set up yet */ }
   }
@@ -352,7 +597,32 @@ const NEW_HOME = null;
     $("prev-client").hidden = !who;
     $("prev-client-name").textContent = who;
   }
-  for (const id of ["client", "reps", "touches"]) $(id).addEventListener("input", () => { saveDraft(); refreshPrevClient(); });
+  function refreshTypical() { $("typical-note").textContent = UroboricFiles.typicalNote($("reps").value, $("touches").value); }
+  const todayIso = () => new Date().toISOString().slice(0, 10);
+  function clientList() { return UroboricClients.list(loadHistory()); }
+  function refreshClientList() {
+    const dl = $("client-list");
+    dl.textContent = "";
+    const typed = $("client").value;
+    const all = clientList();
+    let shown = typed.trim() ? UroboricClients.suggestions(typed, all, 8) : [];
+    if (!shown.length) shown = all.slice(0, 8); // a typo matches nothing: still offer the saved clients
+    for (const c of shown) {
+      const o = document.createElement("option");
+      o.value = c.name; o.label = UroboricClients.describe(c, todayIso());
+      dl.appendChild(o);
+    }
+  }
+  function refreshClientMatch() {
+    const res = UroboricClients.check($("client").value, clientList());
+    const el = $("client-match");
+    el.textContent = UroboricClients.message(res, todayIso());
+    el.classList.toggle("is-suggest", res.kind === "suggest");
+    return res;
+  }
+  for (const id of ["client", "reps", "touches"]) $(id).addEventListener("input", () => {
+    saveDraft(); refreshPrevClient(); refreshTypical(); refreshClientList(); refreshClientMatch();
+  });
   refreshPrevClient();
 
   // ---------------------------------------------------------------- your branding (this device only)
@@ -385,7 +655,9 @@ const NEW_HOME = null;
     };
   }
   function refreshBrandDot() {
-    $("brand-dot").hidden = !(brand.prepared_by || brand.contact || brand.accent_color || brand.logo_data);
+    const on = !!(brand.prepared_by || brand.contact || brand.accent_color || brand.logo_data);
+    $("brand-dot").hidden = !on;
+    $("menu-dot").hidden = !on;
   }
   refreshBrandDot();
 
@@ -603,6 +875,7 @@ const NEW_HOME = null;
     const d = loadDraft();
     $("client").value = d.client || ""; $("reps").value = (d.impact && d.impact.reps) || ""; $("touches").value = (d.impact && d.impact.touches_per_rep_per_day) || "";
     if (engineReady) renderQuestions();
+    refreshTypical(); refreshClientList(); refreshClientMatch();
     const parts = [mode === "replace" ? "Restored. This device now matches the backup." : "Restored."];
     if (stats.added) parts.push(`${stats.added} audit${stats.added === 1 ? "" : "s"} added.`);
     if (stats.duplicates) parts.push(`${stats.duplicates} already here and kept.`);
@@ -647,6 +920,9 @@ const NEW_HOME = null;
       const t = document.createElement("div");
       t.className = "q-title";
       t.textContent = q.title;
+      const qid = document.createElement("span");
+      qid.className = "q-id"; qid.textContent = "check " + q.id;
+      t.appendChild(qid);
       const how = document.createElement("div");
       how.className = "q-how";
       how.textContent = `${q.how}. Healthy: ${q.target}.`.replace("?.", "?");
@@ -755,11 +1031,11 @@ const NEW_HOME = null;
     const recognized = Object.values(kinds);
     const hasContacts = !engineReady ? files.size > 0 : recognized.includes("Contacts");
     const unknown = engineReady ? [...files.keys()].filter((n) => !kinds[n]) : [];
-    $("run-real").disabled = !files.size || (engineReady && !recognized.length);
+    $("run-real").disabled = !files.size;
     $("form-hint").textContent = !files.size ? "Add a contacts export to start."
-      : unknown.length ? `Rename unrecognized files after what's in them (for example contacts.csv); they'll be skipped otherwise.`
-      : !hasContacts ? "Most checks need a contacts export. You can still run with what's here."
-      : `${files.size} file${files.size === 1 ? "" : "s"} ready.`;
+      : unknown.length ? "Some files aren't recognized by name. On the next screen you can say what each one is."
+      : !hasContacts ? "Most checks need a contacts export. The next screen shows what's missing."
+      : `${files.size} file${files.size === 1 ? "" : "s"} chosen. Next, check them.`;
   }
 
   // ---------------------------------------------------------------- running
@@ -793,6 +1069,7 @@ const NEW_HOME = null;
       currentRun = null;
       showResult(reply.result, reply.xlsx, reply.kit);
     } catch (err) {
+      if (err && err.cancelled) return;
       currentRun = null;
       showError(err);
     } finally {
@@ -803,6 +1080,7 @@ const NEW_HOME = null;
   let saveAfterRun = false;
   let tourAfterRun = false; // set by the Guided demo button: start the tour when the report is ready
   function runSample(demo) {
+    check.fromCheck = false;
     saveAfterRun = false; // the made-up sample company isn't kept in history
     tourAfterRun = demo;
     // The sample keeps its own made-up company name and interview answers. In demo mode the engine also
@@ -835,20 +1113,155 @@ const NEW_HOME = null;
       all[histKey(snap.client)] = list.slice(-24);
       localStorage.setItem(HIST_KEY, JSON.stringify(all));
     } catch (_) {}
+    try { refreshClientList(); refreshClientMatch(); } catch (_) { /* not set up yet */ }
   }
 
-  $("audit-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!files.size) return;
+  $("audit-form").addEventListener("submit", (e) => { e.preventDefault(); if (files.size) openCheck(); });
+
+  // ---------------------------------------------------------------- "Check your files"
+  const safeName = (n) => n.replace(/[\\/]/g, "_");
+  const check = { facts: null, chosen: {}, crm: null, dmy: false, seq: 0, held: null, fromCheck: false };
+  const filesSig = () => [...files.values()].map((f) => `${f.name}|${f.size}|${f.lastModified}`).join("\n");
+
+  function openCheck() {
+    check.facts = null; check.chosen = {}; check.crm = null; check.dmy = false; check.held = null;
+    renderCheck();
+    show("check");
+    $("check-h").focus();
+    inspectNow();
+  }
+  async function inspectNow() {
+    const mine = ++check.seq;
+    $("check-loading").hidden = false;
+    $("check-run").disabled = true;
+    try {
+      const args = { settings: { file_map: check.chosen, date_order: null } };
+      let transfer = [];
+      if (check.held !== filesSig()) {
+        const list = [];
+        for (const f of files.values()) list.push({ name: f.name, buffer: await f.arrayBuffer() });
+        args.files = list; transfer = list.map((x) => x.buffer);
+      }
+      const sigNow = filesSig();
+      const reply = await call("inspect", args, transfer);
+      if (mine !== check.seq) return;
+      check.held = sigNow;
+      check.facts = reply.value;
+      if (!check.crm) check.crm = check.facts.crm;
+    } catch (err) {
+      if (mine !== check.seq || (err && err.cancelled)) return;
+      check.facts = { files: [], crm: "salesforce", crm_evidence: false, dates: {}, failed: (err && err.message) || "The files couldn't be read." };
+    }
+    $("check-loading").hidden = true;
+    renderCheck();
+  }
+  const MARK = { ok: "\u2713", warn: "\u26A0", error: "\u26A0", skip: "\u2013" };
+  function renderCheck() {
+    const facts = check.facts;
+    const client = $("client").value.trim();
+    $("check-client-name").textContent = client || "No company name entered";
+    const res = UroboricClients.check(client, clientList());
+    $("check-client-match").textContent = res.kind === "blank" ? "Add a company name on the first screen to keep a history for this client." : UroboricClients.message(res, todayIso());
+    const use = $("check-use-suggestion");
+    use.hidden = res.kind !== "suggest";
+    if (res.kind === "suggest") { use.textContent = "Use " + res.client.name; use.dataset.name = res.client.name; }
+    const cost = UroboricFiles.costNote($("reps").value, $("touches").value);
+    $("check-cost-note").textContent = cost; $("check-cost-note").hidden = !cost;
+    const ul = $("check-files");
+    ul.textContent = "";
+    if (!facts) { $("check-blockers").hidden = $("check-warnings").hidden = $("check-dates").hidden = true; $("check-crm").textContent = ""; return; }
+    const set = UroboricFiles.checkSet(facts.files, check.chosen);
+    if (facts.failed) set.blockers.unshift(facts.failed), set.canRun = false;
+    for (const { f, s } of set.rows) {
+      const li = document.createElement("li");
+      li.className = "is-" + s.status;
+      const mark = document.createElement("span"); mark.className = "mark"; mark.textContent = MARK[s.status]; mark.setAttribute("aria-label", s.status === "ok" ? "Looks good" : s.status === "skip" ? "Not used" : "Needs a look");
+      const nm = document.createElement("span"); nm.className = "fname"; nm.textContent = f.name; nm.title = f.name;
+      if (f.crm && f.table) { const c = document.createElement("span"); c.className = "fcrm"; c.textContent = UroboricFiles.crmName(f.crm); nm.appendChild(c); }
+      const note = document.createElement("span"); note.className = "fnote"; note.textContent = s.note;
+      const sel = document.createElement("select");
+      sel.setAttribute("aria-label", "What is " + f.name + "?");
+      const current = check.chosen[f.name] || f.table || "";
+      if (!current) { const o = document.createElement("option"); o.value = ""; o.textContent = "Choose what this is\u2026"; sel.appendChild(o); }
+      for (const o of UroboricFiles.optionsFor(f.detected || f.table)) {
+        const opt = document.createElement("option");
+        opt.value = o.value; opt.textContent = o.label;
+        sel.appendChild(opt);
+      }
+      sel.value = current;
+      sel.addEventListener("change", () => {
+        if (sel.value) check.chosen[f.name] = sel.value; else delete check.chosen[f.name];
+        inspectNow();
+      });
+      const assign = document.createElement("label"); assign.className = "fassign";
+      const lead = document.createElement("span"); lead.textContent = "This file is:";
+      assign.append(lead, sel);
+      li.append(mark, nm, assign, note);
+      ul.appendChild(li);
+    }
+    const crmSel = $("check-crm");
+    crmSel.textContent = "";
+    for (const c of UroboricFiles.CRMS) { const o = document.createElement("option"); o.value = c.value; o.textContent = c.label; crmSel.appendChild(o); }
+    crmSel.value = check.crm || facts.crm;
+    $("check-crm-note").textContent = crmSel.value !== facts.crm ? `Detected: ${UroboricFiles.crmName(facts.crm)}. You changed it, so the audit will use ${UroboricFiles.crmName(crmSel.value)}.`
+      : facts.crm_evidence ? `Detected automatically from the column names: ${UroboricFiles.crmName(facts.crm)}.`
+      : `Couldn't tell from the column names, so ${UroboricFiles.crmName(facts.crm)} is assumed. Change it if that's wrong.`;
+    const dr = UroboricFiles.dateReading(facts.dates, check.dmy ? "dmy" : null);
+    $("check-dates").hidden = !dr;
+    if (dr) {
+      $("check-dates-text").textContent = dr.text;
+      const ex = $("check-dates-examples");
+      ex.textContent = "";
+      for (const t of dr.examples) { const li = document.createElement("li"); li.textContent = t; ex.appendChild(li); }
+      $("check-dmy-wrap").hidden = !dr.toggle;
+      $("check-dmy").checked = check.dmy;
+    }
+    const fill = (box, list, items) => { list.textContent = ""; for (const t of items) { const li = document.createElement("li"); li.textContent = t; list.appendChild(li); } box.hidden = !items.length; };
+    fill($("check-blockers"), $("check-blockers-list"), set.blockers);
+    fill($("check-warnings"), $("check-warnings-list"), set.warnings);
+    $("check-run").disabled = !set.canRun || !$("check-loading").hidden;
+  }
+  $("check-crm").addEventListener("change", () => { check.crm = $("check-crm").value; renderCheck(); });
+  $("check-dmy").addEventListener("change", () => { check.dmy = $("check-dmy").checked; renderCheck(); });
+  $("check-use-suggestion").addEventListener("click", () => {
+    $("client").value = $("check-use-suggestion").dataset.name; saveDraft(); refreshPrevClient(); refreshClientMatch(); renderCheck();
+  });
+  $("check-back").addEventListener("click", () => show("start"));
+  $("check-different").addEventListener("click", () => {
+    files.clear(); kinds = {}; check.facts = null; check.held = null; check.seq++;
+    refreshFiles(); show("start");
+    try { $("files").click(); } catch (_) { /* the picker needs a tap on some browsers: the Choose files box is right there */ }
+  });
+  $("check-run").addEventListener("click", async () => {
+    if (!check.facts || $("check-run").disabled) return;
+    $("check-run").disabled = true;
     const payload = [];
     for (const [name, f] of files) payload.push({ name, buffer: await f.arrayBuffer() });
     const settings = collectSettings();
-    const today = new Date().toISOString().slice(0, 10);
-    settings.previous = settings.client ? previousFor(settings.client, today) : null;
+    settings.previous = settings.client ? previousFor(settings.client, todayIso()) : null;
     settings.branding = brandForEngine();
+    settings.file_map = {};
+    for (const f of check.facts.files) settings.file_map[f.name] = f.table || "skip";
+    const dr = UroboricFiles.dateReading(check.facts.dates, check.dmy ? "dmy" : null);
+    if (dr && dr.toggle && check.dmy) settings.date_order = "dmy";
+    if (check.crm && check.crm !== check.facts.crm) settings.crm_override = check.crm;
     saveAfterRun = true;
-    run("runUploaded", { files: payload, settings }, payload.map((p) => p.buffer),
-      `Auditing ${settings.client || "the CRM"}`);
+    check.fromCheck = true;
+    run("runUploaded", { files: payload, settings }, payload.map((p) => p.buffer), `Auditing ${settings.client || "the CRM"}`);
+  });
+
+  // Cancel while an audit runs: stop the engine, start a fresh one, and go back with the files kept
+  $("work-cancel").addEventListener("click", () => {
+    const back = check.fromCheck && check.facts ? "check" : "start";
+    if (currentRun) currentRun = null;
+    worker.terminate();
+    for (const p of pending.values()) p.reject({ cancelled: true, message: "Cancelled." });
+    pending.clear();
+    engineReady = false; engineError = null; check.held = null; onProgress = null; tourAfterRun = false;
+    const el = $("engine"); el.className = "engine is-loading"; el.querySelector("span").textContent = "Restarting";
+    spawnWorker();
+    show(back);
+    if (back === "check") { renderCheck(); inspectNow(); }
   });
 
   function showError(err) {
@@ -899,6 +1312,7 @@ const NEW_HOME = null;
     let canShare = false;
     try { canShare = !!(navigator.canShare && navigator.canShare({ files: [last.htmlFile] })); } catch (_) {}
     $("share").hidden = !canShare;
+    $("share-btn").setAttribute("aria-describedby", "pdf-hint");
     document.title = `${result.client} - Uroboric`;
     show("result");
     if (tourAfterRun) { tourAfterRun = false; startTour(); }
@@ -925,7 +1339,6 @@ const NEW_HOME = null;
 
   $("save-xlsx").addEventListener("click", () => last && download(last.xlsx, last.result.xlsx_name));
   $("save-kit").addEventListener("click", () => last && download(last.kit, last.result.kit_name));
-  $("save-pdf").addEventListener("click", () => window.print());
 
   // ---------------------------------------------------------------- apply review (returned workbook -> ready-to-load zip)
   // The zip is only downloaded after the person has seen "What will change" and tapped Download.
@@ -939,7 +1352,7 @@ const NEW_HOME = null;
   }
   const openApply = () => { resetApplyDialog(); applyDialog.showModal(); };
   $("apply-open").addEventListener("click", openApply);
-  $("apply-open-2").addEventListener("click", openApply);
+  $("apply-open-home").addEventListener("click", openApply);
   $("apply-close").addEventListener("click", () => { resetApplyDialog(); applyDialog.close(); });
   $("apply-cancel").addEventListener("click", () => {
     resetApplyDialog();
@@ -1070,6 +1483,8 @@ const NEW_HOME = null;
     saveAfterRun = next.saveAfterRun; tourAfterRun = next.tourAfterRun;
     for (const id of ["client", "reps", "touches"]) $(id).value = "";
     UroboricSession.clearStorage(storageOrNull() || { getItem() { return null; }, removeItem() {} });
+    check.facts = null; check.chosen = {}; check.crm = null; check.dmy = false; check.held = null; check.seq++; check.fromCheck = false;
+    refreshTypical(); refreshClientList(); refreshClientMatch();
     renderQuestions();                       // reads the (now empty) draft: every answer back to "Not asked"
     refreshFiles();
     const host = $("report");
@@ -1089,6 +1504,46 @@ const NEW_HOME = null;
     catch (_) { alert("The screen is cleared, but the audit engine couldn't delete its working copy of the last client's files. Reload this page to clear it."); }
   });
   window.addEventListener("afterprint", () => {});
+
+  // ---------------------------------------------------------------- drop-down menus (More, Share / PDF, narrow Menu)
+  function makeMenu(btn, panel, opts) {
+    opts = opts || {};
+    const wrap = btn.parentElement;
+    let state = { open: false };
+    const items = () => [...panel.querySelectorAll('[role="menuitem"]')].filter((b) => !b.hidden);
+    function apply(next) {
+      state = { open: next.open };
+      panel.hidden = !next.open;
+      btn.setAttribute("aria-expanded", String(next.open));
+      if (next.focus === "first") (items()[0] || btn).focus();
+      else if (next.focus === "button") btn.focus();
+    }
+    btn.addEventListener("click", () => {
+      if (opts.direct && !state.open && opts.direct()) return;
+      apply(UroboricMenu.reduce(state, "toggle"));
+    });
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { if (state.open) { e.stopPropagation(); apply(UroboricMenu.reduce(state, "escape")); } return; }
+      if (e.key === "Tab") { if (state.open) apply(UroboricMenu.reduce(state, "tab")); return; }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+      e.preventDefault();
+      if (!state.open) { apply({ open: true, focus: "first" }); return; }
+      const list = items();
+      const at = list.indexOf(document.activeElement);
+      const to = at < 0 ? (e.key === "ArrowUp" ? list.length - 1 : 0) : UroboricMenu.moveFocus(at, list.length, e.key);
+      if (list[to]) list[to].focus();
+    });
+    panel.addEventListener("click", (e) => { if (e.target.closest('[role="menuitem"]')) apply(UroboricMenu.reduce(state, "choose")); });
+    document.addEventListener("pointerdown", (e) => { if (state.open && !wrap.contains(e.target)) apply(UroboricMenu.reduce(state, "outside")); });
+    return { close: () => apply(UroboricMenu.reduce(state, "outside")), isOpen: () => state.open };
+  }
+  const moreMenu = makeMenu($("more-btn"), $("more-menu"));
+  const shareMenu = makeMenu($("share-btn"), $("share-menu"), { direct: () => { if ($("share").hidden) { window.print(); return true; } return false; } });
+  const barMenu = makeMenu($("bar-menu-btn"), $("bar-menu"));
+  $("bar-menu").addEventListener("click", (e) => { const t = e.target.closest("[data-click]"); if (t) $(t.dataset.click).click(); });
+  window.addEventListener("beforeprint", () => { moreMenu.close(); shareMenu.close(); barMenu.close(); });
+  $("save-pdf").addEventListener("click", () => window.print());
+  refreshTypical(); refreshClientList(); refreshClientMatch();
 
   // ---------------------------------------------------------------- offline support and updates
   // A new version downloads in the background and waits. We tell the person ("A new version of Uroboric

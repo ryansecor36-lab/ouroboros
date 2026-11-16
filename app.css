@@ -66,7 +66,7 @@ button, input, select { font: inherit; color: inherit; }
 .btn.small { min-height: 38px; padding: 0 14px; font-size: 15px; position: relative; }
 .btn .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-left: 8px; }
 .btn .short { display: none; }
-@media (max-width: 520px) { .engine span { display: none; } .btn .long { display: none; } .btn .short { display: inline; } }
+@media (max-width: 520px) { .engine span { display: none; } }
 .bar-inner { flex-wrap: wrap; padding-block: 6px; }
 
 /* back up / restore */
@@ -314,3 +314,59 @@ body.tour-side #report { margin-right: 420px; }
   font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .apply-warnings { margin: 0 0 8px; padding-left: 20px; font-size: 13px; color: #92400e; }
 #apply-review-box[hidden] { display: none; }
+
+/* menus: Share / PDF, More, and the narrow-screen Menu */
+.menu { position: relative; display: inline-block; }
+.menu-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 240px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+  display: grid; gap: 2px; }
+.menu-panel[hidden] { display: none; }
+.menu-panel button { min-height: 48px; padding: 0 14px; text-align: left; border: 0; border-radius: 10px; background: transparent;
+  font-size: 16px; font-weight: 550; cursor: pointer; white-space: nowrap; }
+.menu-panel button:hover, .menu-panel button:focus-visible { background: var(--accent-soft); }
+.menu-panel button[hidden] { display: none; }
+.bar-wide { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.bar-narrow { display: none; }
+@media (max-width: 820px) { .bar-wide { display: none; } .bar-narrow { display: inline-block; } }
+@media print { .menu, .menu-panel { display: none !important; } }
+
+/* Check your files */
+.check-screen { max-width: 860px; margin: 0 auto; }
+.demo .btn:not(.primary) { background: transparent; border-color: rgba(255, 255, 255, .6); color: inherit; }
+.check-title { font-size: 30px; margin: 4px 0 6px; }
+.check-client { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 4px;
+  padding: 10px 14px; background: var(--accent-soft); border-radius: 12px; }
+.check-typical { margin: 8px 0 0; color: var(--warn); }
+.check-files { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 10px; }
+.check-files li { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(250px, 330px); gap: 4px 12px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.check-files li.is-error { border-color: var(--bad); }
+.check-files li.is-warn { border-color: var(--warn); }
+.check-files .mark { font-weight: 800; font-size: 20px; width: 26px; text-align: center; }
+.check-files .is-ok .mark { color: var(--good); }
+.check-files .is-warn .mark { color: var(--warn); }
+.check-files .is-error .mark { color: var(--bad); }
+.check-files .is-skip .mark { color: var(--muted); }
+.check-files .fname { font-weight: 600; font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.check-files .fnote { grid-column: 2; color: var(--muted); font-size: 14px; }
+.check-files .fcrm { font-size: 12.5px; font-weight: 650; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--navy); margin-left: 8px; }
+.check-files .fassign { grid-column: 3; grid-row: 1 / span 2; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.check-files .fassign span { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.check-files .fassign select { flex: 1; min-width: 0; width: 100%; }
+@media (max-width: 820px) { .check-files li { grid-template-columns: auto minmax(0, 1fr); } .check-files .fassign { grid-column: 1 / -1; grid-row: auto; } .check-files .fnote { grid-column: 1 / -1; } }
+select { width: 100%; min-height: 44px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 16px; }
+.check-set { display: grid; gap: 14px; margin: 8px 0 16px; }
+.check-dates { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 6px; }
+.check-date-list { margin: 0; padding-left: 20px; font-variant-numeric: tabular-nums; }
+.check-box { margin: 10px 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); }
+.check-box ul { margin: 6px 0 0; padding-left: 20px; }
+.check-box.is-blocker { border-color: var(--bad); background: rgba(192, 57, 43, .08); }
+.check-box.is-warning { border-color: var(--warn); background: rgba(154, 101, 0, .08); }
+.check-actions { display: grid; gap: 10px; margin-top: 16px; }
+.client-match, .typical-note { min-height: 0; }
+.client-match.is-suggest { color: var(--warn); font-weight: 600; }
+.apply-card { margin-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.apply-card h2 { font-size: 19px; margin: 0 0 4px; }
+.bk-why { margin: 8px 0; }
+.q-id { color: var(--muted); font-size: 12px; font-weight: 500; margin-left: 6px; white-space: nowrap; }
+#work-cancel { margin-top: 6px; }

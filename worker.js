@@ -53,6 +53,13 @@ self.onmessage = async (ev) => {
     await ready;
     if (method === "identify") {
       postMessage({ type: "reply", id, value: JSON.parse(web.identify(JSON.stringify(args.names))) });
+    } else if (method === "inspect") {
+      // "Check your files": write the chosen files once (args.files), then answer from them as the settings change
+      if (args.files) {
+        const dir = web.reset_inspect_dir();
+        for (const f of args.files) py.FS.writeFile(`${dir}/${f.name.replace(/[\\/]/g, "_")}`, new Uint8Array(f.buffer));
+      }
+      postMessage({ type: "reply", id, value: JSON.parse(web.inspect_files(JSON.stringify(args.settings || {}))) });
     } else if (method === "quote") {
       postMessage({ type: "reply", id, value: JSON.parse(web.quote_json(JSON.stringify(args.settings))) });
     } else if (method === "resetWorkspace") {

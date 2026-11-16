@@ -69,7 +69,7 @@ const UroboricTour = (() => {
     }
 
     // 6. The fix
-    add("cleanup", s.has_cleanup ? "cleanup" : "app:save-kit", "The fix",
+    add("cleanup", s.has_cleanup ? "cleanup" : "app:more-btn", "The fix",
       "The cleanup review: your team approves every change in one workbook. Nothing in the CRM changes without a yes. " +
       "Then the approved changes are loaded, with undo files in case anything needs to be put back.");
 
