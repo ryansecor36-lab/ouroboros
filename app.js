@@ -32,7 +32,7 @@ const UroboricBackup = (() => {
       if (b.logo_data.length * 0.75 > MAX_LOGO_BYTES) warnings.push("The logo in this backup is over 1 MB, so it was left out.");
       else out.logo_data = b.logo_data;
     }
-    if (b.show_powered_by === false) out.show_powered_by = false;
+    if (typeof b.show_powered_by === "boolean") out.show_powered_by = b.show_powered_by;   // an explicit true is kept too
     return { value: Object.keys(out).length ? out : undefined, warnings };
   }
 
@@ -397,7 +397,18 @@ const UroboricFiles = (() => {
     return empty(reps) || empty(touches) ? "No dollar figures in the report yet: enter this team's reps and calls per rep on the first screen." : "";
   }
 
-  return { OPTIONS, CRMS, CORE, crmName, tableLabel, optionsFor, rowStatus, duplicates, checkSet, fileMap, fmtDate, dateReading, typicalNote, costNote };
+  /* The consultant's choices on "Check your files" (file -> kind, CRM override, day/month/year) for the current client, carried
+     across Edit this audit -> Check your files. prev: { chosen, crm, dmy, names } from the last visit; names: the files now chosen.
+     A removed file drops its entry, a new file starts unassigned; if the set of files changed, the CRM and date choices are re-detected. */
+  function keepChoices(prev, names) {
+    prev = prev || {};
+    const now = [...names].sort(), before = [...(prev.names || [])].sort();
+    const chosen = {};
+    for (const n of now) if (prev.chosen && Object.prototype.hasOwnProperty.call(prev.chosen, n)) chosen[n] = prev.chosen[n];
+    const same = now.length === before.length && now.every((n, i) => n === before[i]);
+    return { chosen, crm: same ? (prev.crm || null) : null, dmy: same ? !!prev.dmy : false, names: now };
+  }
+  return { OPTIONS, CRMS, CORE, crmName, tableLabel, optionsFor, rowStatus, duplicates, checkSet, fileMap, fmtDate, dateReading, typicalNote, costNote, keepChoices };
 })();
 if (typeof module !== "undefined" && module.exports) Object.assign(module.exports, { UroboricFiles });
 
@@ -1120,11 +1131,13 @@ const NEW_HOME = null;
 
   // ---------------------------------------------------------------- "Check your files"
   const safeName = (n) => n.replace(/[\\/]/g, "_");
-  const check = { facts: null, chosen: {}, crm: null, dmy: false, seq: 0, held: null, fromCheck: false };
+  const check = { facts: null, chosen: {}, crm: null, dmy: false, names: [], seq: 0, held: null, fromCheck: false };
   const filesSig = () => [...files.values()].map((f) => `${f.name}|${f.size}|${f.lastModified}`).join("\n");
 
   function openCheck() {
-    check.facts = null; check.chosen = {}; check.crm = null; check.dmy = false; check.held = null;
+    // keep this client's choices from the last visit (see UroboricFiles.keepChoices); a removed file drops its entry
+    const kept = UroboricFiles.keepChoices({ chosen: check.chosen, crm: check.crm, dmy: check.dmy, names: check.names }, [...files.keys()]);
+    check.facts = null; check.chosen = kept.chosen; check.crm = kept.crm; check.dmy = kept.dmy; check.names = kept.names; check.held = null;
     renderCheck();
     show("check");
     $("check-h").focus();
@@ -1228,7 +1241,7 @@ const NEW_HOME = null;
   });
   $("check-back").addEventListener("click", () => show("start"));
   $("check-different").addEventListener("click", () => {
-    files.clear(); kinds = {}; check.facts = null; check.held = null; check.seq++;
+    files.clear(); kinds = {}; check.facts = null; check.chosen = {}; check.crm = null; check.dmy = false; check.names = []; check.held = null; check.seq++;
     refreshFiles(); show("start");
     try { $("files").click(); } catch (_) { /* the picker needs a tap on some browsers: the Choose files box is right there */ }
   });
@@ -1483,7 +1496,7 @@ const NEW_HOME = null;
     saveAfterRun = next.saveAfterRun; tourAfterRun = next.tourAfterRun;
     for (const id of ["client", "reps", "touches"]) $(id).value = "";
     UroboricSession.clearStorage(storageOrNull() || { getItem() { return null; }, removeItem() {} });
-    check.facts = null; check.chosen = {}; check.crm = null; check.dmy = false; check.held = null; check.seq++; check.fromCheck = false;
+    check.facts = null; check.chosen = {}; check.crm = null; check.dmy = false; check.names = []; check.held = null; check.seq++; check.fromCheck = false;
     refreshTypical(); refreshClientList(); refreshClientMatch();
     renderQuestions();                       // reads the (now empty) draft: every answer back to "Not asked"
     refreshFiles();

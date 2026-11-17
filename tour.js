@@ -16,7 +16,8 @@ const UroboricTour = (() => {
   ];
 
   /* summary: { grade, score, grade_line, areas:[{name, rating, pct}], problems:[{title, headline}], cost, cost_text,
-                hours, sources_headline, has_progress, progress_headline, progress_is_example, has_cleanup,
+                hours, cost_basis, cost_defaults, cost_range, hours_range, grade_basis, grade_status, sources_headline, has_progress, progress_headline, progress_note,
+                progress_is_example, has_cleanup,
                 crm_name, client_name, is_sample }
      returns [{ id, target, title, text, list? }]; target is a data-tour name, "app:<element id>" or null. */
   function buildTourSteps(s) {
@@ -29,7 +30,10 @@ const UroboricTour = (() => {
     if (s.grade && isNum(s.score)) {
       add("grade", "grade", "The grade",
         `${sample ? "This sample CRM" : "This CRM"} scores a ${s.grade}, ${num(s.score)} out of 100.` +
-        (s.grade_line ? ` ${s.grade_line}` : ""));
+        (s.grade_line ? ` ${s.grade_line}` : "") +
+        (s.grade_basis ? ` ${s.grade_basis}` : ""));
+    } else if (s.grade_status === "withheld" && s.grade_basis) {
+      add("grade", "grade", "The grade", String(s.grade_basis));
     }
 
     // 2. The six areas
@@ -54,11 +58,19 @@ const UroboricTour = (() => {
         ((s.problems || []).length > 1 ? ` The next ${(s.problems || []).length - 1} are right below it.` : ""));
     }
 
-    // 4. What it costs
+    // 4. What it costs (always an estimate, with the inputs next to it)
     if (isNum(s.cost) && s.cost > 0 && s.cost_text) {
-      add("cost", "cost", "What it costs",
-        `${s.cost_text} a year of rep time${isNum(s.hours) ? ` (about ${num(s.hours)} hours)` : ""} goes on calls ` +
-        "and emails that hit dead ends. It is a deliberately conservative estimate, and the assumptions are listed in the report.");
+      const basis = s.cost_basis ? String(s.cost_basis).trim().replace(/[.]$/, "") : "";
+      const range = s.cost_range && s.hours_range;
+      add("cost", "cost", "What it costs (an estimate)",
+        (range
+          ? `About ${s.hours_range} rep hours a year (estimated ${s.cost_range}) go on calls and emails that hit dead ends.`
+          : `Estimated ${s.cost_text} a year of rep time${isNum(s.hours) ? ` (about ${num(s.hours)} hours)` : ""} goes on calls ` +
+            "and emails that hit dead ends.") +
+        " This is a modelled range, not a measurement" +
+        (basis ? `: ${basis}.` : ".") +
+        (s.cost_defaults ? " Some inputs are standard assumptions, not figures from your team, so confirm them." : "") +
+        " The assumptions are listed in the report.");
     }
 
     // 5. Where bad data comes from
@@ -78,8 +90,9 @@ const UroboricTour = (() => {
       add("progress", "progress", "Progress over time",
         (s.progress_is_example
           ? "This is what a monthly re-audit shows: the score, what got better and what slipped. The earlier audit here is an example made up for the demo."
-          : "This compares today with the last audit: the score, what got better and what slipped.") +
-        (s.progress_headline ? ` ${s.progress_headline}.` : ""));
+          : "This compares today with the last audit on the checks measured both times: the score, what got better and what slipped.") +
+        (s.progress_headline ? ` ${s.progress_headline}.` : "") +
+        (s.progress_note ? ` ${s.progress_note}` : ""));
     } else {
       add("progress", "top", "Progress over time",
         "Run this monthly and this section shows the trend.");
