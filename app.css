@@ -53,6 +53,10 @@ button, input, select { font: inherit; color: inherit; }
 }
 .bar-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; }
+button.brand { background: none; border: 0; padding: 4px 6px; margin: -4px -6px; color: inherit; font-family: inherit;
+  cursor: pointer; border-radius: 8px; -webkit-tap-highlight-color: transparent; }
+button.brand:hover { opacity: .85; }
+button.brand:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .brand img { border-radius: 7px; }
 .engine { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .engine i { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }

@@ -1477,6 +1477,11 @@ const NEW_HOME = null;
   });
   // "Edit this audit": back to the form with everything kept
   $("back").addEventListener("click", () => { document.title = "Uroboric"; show("start"); });
+  // The logo goes back to the start screen too (everything entered is kept); not while an audit is running
+  $("brand-home").addEventListener("click", () => {
+    if (!$("view-working").hidden) return;
+    document.title = "Uroboric"; show("start");
+  });
 
   // "Start another client": nothing from the previous client stays on this device's screen or in the worker
   const newClientDialog = $("newclient-dialog");
