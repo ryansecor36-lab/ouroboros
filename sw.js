@@ -8,7 +8,7 @@
    take over ({type:"SKIP_WAITING"}) when the person taps Refresh now, so a report on screen is never
    swapped out. New builds are noticed by the browser's service-worker update check and by the app's
    version probe (index.html?__uroboric_probe=<time>), which goes straight to the network and is never cached. */
-const VERSION = "29e10a1ba647";
+const VERSION = "54468602666c";
 const FILES = ["./", "app.css", "app.js", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "index.html", "manifest.webmanifest", "py/crm_audit.zip", "py/et_xmlfile-2.0.0-py3-none-any.whl", "py/openpyxl-3.1.5-py2.py3-none-any.whl", "py/phonenumbers-9.0.43-py2.py3-none-any.whl", "py/wheels.json", "pyodide/numpy-2.0.2-cp312-cp312-pyodide_2024_0_wasm32.whl", "pyodide/pandas-2.2.3-cp312-cp312-pyodide_2024_0_wasm32.whl", "pyodide/pyodide-lock.json", "pyodide/pyodide.asm.js", "pyodide/pyodide.asm.wasm", "pyodide/pyodide.js", "pyodide/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", "pyodide/python_stdlib.zip", "pyodide/pytz-2024.1-py2.py3-none-any.whl", "pyodide/six-1.16.0-py2.py3-none-any.whl", "tour.js", "worker.js"];
 const CACHE = "crm-audit-" + VERSION;
 
