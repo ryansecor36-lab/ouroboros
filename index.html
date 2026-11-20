@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Uroboric</title>
-<meta name="description" content="Audit a Salesforce, HubSpot, Dynamics 365 or Bullhorn (pilot) CRM's data health right on this device.">
+<meta name="description" content="Audit a Salesforce, HubSpot, Dynamics 365, Bullhorn (pilot) or Crelate (pilot) CRM's data health right on this device.">
 <meta name="theme-color" content="#1f3a5f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -182,7 +182,7 @@
 <main id="view-start" class="view app-chrome">
   <section class="intro">
     <h1>How healthy is this CRM?</h1>
-    <p class="lede">Load a company's Salesforce, HubSpot, Dynamics 365 or Bullhorn (pilot) exports and get a plain-English report in about a minute:
+    <p class="lede">Load a company's Salesforce, HubSpot, Dynamics 365, Bullhorn (pilot) or Crelate (pilot) exports and get a plain-English report in about a minute:
       a grade, what bad data costs the sales team, and what to fix first.</p>
     <p class="privacy">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4.5" y="10" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
@@ -206,6 +206,7 @@
         <input type="radio" name="sample-crm" id="sc-hubspot" value="hubspot"><label for="sc-hubspot">HubSpot</label>
         <input type="radio" name="sample-crm" id="sc-dynamics" value="dynamics"><label for="sc-dynamics">Dynamics 365</label>
         <input type="radio" name="sample-crm" id="sc-bullhorn" value="bullhorn"><label for="sc-bullhorn" title="Bullhorn support is in pilot: we confirm on your export before quoting.">Bullhorn (pilot)</label>
+        <input type="radio" name="sample-crm" id="sc-crelate" value="crelate"><label for="sc-crelate" title="Crelate support is in pilot: we confirm on your export before quoting.">Crelate (pilot)</label>
       </div>
       <ul class="demo-facts">
         <li><b>41</b> checks</li>
@@ -244,7 +245,7 @@
           <label class="drop" for="files" id="drop">
             <input id="files" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple aria-labelledby="files-label">
             <strong>Choose files</strong>
-            <span>Salesforce, HubSpot, Dynamics 365 or Bullhorn (pilot) exports from Files, email or AirDrop: contacts, companies, deals, leads, users</span>
+            <span>Salesforce, HubSpot, Dynamics 365, Bullhorn (pilot) or Crelate (pilot) exports from Files, email or AirDrop: contacts, companies, deals, leads, users</span>
           </label>
           <ul id="file-list" class="files" aria-live="polite"></ul>
         </div>
@@ -282,6 +283,8 @@
             <td>The Excel files, unrenamed</td></tr>
           <tr><td title="Bullhorn support is in pilot: we confirm on your export before quoting.">Bullhorn (pilot)</td><td>Each list (Client Contacts, Companies, Opportunities, Leads, Users) &gt; Columns: tick every field &gt; select all &gt; Selected &gt; Export as CSV. Not the Candidates list.</td>
             <td>The CSV files, unrenamed</td></tr>
+          <tr><td title="Crelate support is in pilot: we confirm on your export before quoting.">Crelate (pilot)</td><td>Contacts, Companies and Opportunities lists &gt; Export &gt; CSV or Excel, "All Columns", tick "Include the Id of each record". The Contacts list also holds candidates: include the Tags column.</td>
+            <td>The CSV or Excel files, unrenamed (a Users list too, if you can export one)</td></tr>
         </tbody>
       </table>
     </div>
@@ -402,7 +405,7 @@
   <div id="report" class="report-host"></div>
 </section>
 
-<p class="hint app-version">Uroboric 1.6.0</p>
+<p class="hint app-version">Uroboric 1.7.0</p>
 
 <script src="tour.js"></script>
 <script src="app.js"></script>

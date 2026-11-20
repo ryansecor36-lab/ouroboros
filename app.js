@@ -284,6 +284,7 @@ const UroboricFiles = (() => {
   const CRMS = [
     { value: "salesforce", label: "Salesforce" }, { value: "hubspot", label: "HubSpot" },
     { value: "dynamics", label: "Dynamics 365" }, { value: "bullhorn", label: "Bullhorn (pilot)" },
+    { value: "crelate", label: "Crelate (pilot)" },
   ];
   const crmName = (k) => (CRMS.find((c) => c.value === k) || {}).label || "";
   const tableLabel = (t) => (OPTIONS.find((o) => o.value === t) || {}).label || EXTRA[t] || "";
